@@ -752,6 +752,7 @@ h2 {
   .topbar {
     min-height: 64px;
     padding: 10px 14px;
+    backdrop-filter: none;
   }
 
   .brand-mark {
