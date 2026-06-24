@@ -769,10 +769,12 @@ h2 {
 
   .tabbar {
     position: fixed;
+    top: auto;
     right: 10px;
-    bottom: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
     left: 10px;
     z-index: 40;
+    width: auto;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 2px;
     padding: 6px;
