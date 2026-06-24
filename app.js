@@ -27,7 +27,7 @@
     lounge: "Lounge",
     custom: "Custom"
   };
-  const EQ_BANDS = ["63", "160", "400", "1k", "2.5k", "6.3k"];
+  const EQ_BANDS = ["63 Hz", "160 Hz", "400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz"];
   const ROLE_VALUES = ["M", "L", "R"];
   const TEAMUP_VALUES = ["solo", "host", "join"];
   const DEFAULT_EQ = { preset: "dancefloor", bands: [0, 0, 0, 0, 0, 0] };
@@ -758,7 +758,7 @@
                   <span class="band-value">${numericValue > 0 ? "+" : ""}${numericValue}</span>
                   <input type="range" min="-10" max="10" value="${numericValue}" ${disabled}
                     data-control="band" data-band="${index}" data-speaker-id="${escapeAttr(speaker.id)}">
-                  <span class="band-label">${EQ_BANDS[index]} Hz</span>
+                  <span class="band-label">${EQ_BANDS[index]}</span>
                 </label>
               `;
             }).join("")}
