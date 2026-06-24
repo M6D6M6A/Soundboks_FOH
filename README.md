@@ -46,7 +46,7 @@ Version 1 soll zuerst eine SOUNDBOKS 4 stabil steuern:
 - Gruppen-Volume ueber parallele Writes auf alle Gruppengeraete
 - Routing Buttons: `Mono beide`, `L/R`, `R/L`, `Left tauschen`
 - Setup Editor fuer Speaker States, Volume Limits, EQ und Routing
-- Safety Volume Modes: `Home 0-25`, `Chill 0-50`, `Party 0-100`
+- Safety Volume Modes: `Home 0-25`, `Chill 0-50`, `Party 0-255`
 - Diagnostics View fuer Raw BLE Reads, Writes und Notifications
 
 ## Grundregeln

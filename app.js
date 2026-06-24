@@ -17,7 +17,7 @@
   const LIMITS = [
     { name: "Home", minRaw: 0, maxRaw: 25 },
     { name: "Chill", minRaw: 0, maxRaw: 50 },
-    { name: "Party", minRaw: 0, maxRaw: 100 }
+    { name: "Party", minRaw: 0, maxRaw: 255 }
   ];
 
   const EQ_PRESETS = ["dancefloor", "stage", "lounge", "custom"];
@@ -652,7 +652,7 @@
   function renderLimits() {
     $("#limitGrid").innerHTML = LIMITS.map((limit) => `
       <button class="chip-button ${limit.name === state.activeLimit ? "is-active" : ""}" type="button" data-limit="${limit.name}">
-        ${escapeHtml(limit.name)}
+        ${escapeHtml(limit.name)} ${limit.maxRaw}
       </button>
     `).join("");
     $("#activeLimitLabel").textContent = state.activeLimit;
