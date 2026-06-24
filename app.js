@@ -27,6 +27,7 @@
     lounge: "Lounge",
     custom: "Custom"
   };
+  const EQ_BANDS = ["63", "160", "400", "1k", "2.5k", "6.3k"];
   const ROLE_VALUES = ["M", "L", "R"];
   const TEAMUP_VALUES = ["solo", "host", "join"];
   const DEFAULT_EQ = { preset: "dancefloor", bands: [0, 0, 0, 0, 0, 0] };
@@ -207,7 +208,7 @@
     }
 
     if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-      navigator.serviceWorker.register("sw.js?v=20260624-material").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260624-eq-logo").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -735,26 +736,32 @@
           </div>
         </div>
 
-        <div class="control-section">
-          <span class="section-label">EQ Preset</span>
-          <div class="segmented eq">
+        <div class="control-section eq-panel">
+          <div class="eq-header">
+            <span class="section-label">EQ</span>
+            <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
+          </div>
+          <div class="segmented eq" aria-label="EQ Presets">
             ${EQ_PRESETS.map((preset) => `
               <button class="preset-button ${eq.preset === preset ? "is-active" : ""}" type="button" ${disabled}
                 data-action="eq-preset" data-preset="${preset}" data-speaker-id="${escapeAttr(speaker.id)}">${EQ_LABELS[preset]}</button>
             `).join("")}
           </div>
-        </div>
-
-        <div class="control-section">
-          <span class="section-label">Custom EQ</span>
+          <div class="eq-curve" aria-hidden="true">
+            ${eq.bands.map((value) => `<i style="height: ${44 + Number(value) * 3}px"></i>`).join("")}
+          </div>
           <div class="band-grid">
-            ${eq.bands.map((value, index) => `
-              <label class="band-control">
-                <input type="range" min="-10" max="10" value="${Number(value)}" ${disabled}
-                  data-control="band" data-band="${index}" data-speaker-id="${escapeAttr(speaker.id)}">
-                <span>B${index + 1} ${Number(value) > 0 ? "+" : ""}${Number(value)}</span>
-              </label>
-            `).join("")}
+            ${eq.bands.map((value, index) => {
+              const numericValue = Number(value);
+              return `
+                <label class="band-control">
+                  <span class="band-value">${numericValue > 0 ? "+" : ""}${numericValue}</span>
+                  <input type="range" min="-10" max="10" value="${numericValue}" ${disabled}
+                    data-control="band" data-band="${index}" data-speaker-id="${escapeAttr(speaker.id)}">
+                  <span class="band-label">${EQ_BANDS[index]} Hz</span>
+                </label>
+              `;
+            }).join("")}
           </div>
         </div>
 

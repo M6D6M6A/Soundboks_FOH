@@ -1,4 +1,4 @@
-const CACHE_NAME = "soundboks-foh-v4";
+const CACHE_NAME = "soundboks-foh-v5";
 const ASSETS = [
   "./",
   "./index.html",
