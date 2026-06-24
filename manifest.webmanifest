@@ -1,0 +1,17 @@
+{
+  "name": "Soundboks_FOH",
+  "short_name": "SBOX_FOH",
+  "description": "Lokale Web-Bluetooth-Steuerung fuer SOUNDBOKS 4.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#111312",
+  "theme_color": "#111312",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

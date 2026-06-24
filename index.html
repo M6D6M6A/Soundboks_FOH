@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111312">
+    <meta name="description" content="Soundboks_FOH steuert SOUNDBOKS 4 Lautsprecher lokal ueber Web Bluetooth.">
+    <title>Soundboks_FOH</title>
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <noscript>
+      <div class="noscript">Soundboks_FOH braucht JavaScript, um Bluetooth-Geraete zu steuern.</div>
+    </noscript>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#dashboard" aria-label="Soundboks_FOH Dashboard">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </span>
+          <span>
+            <strong>Soundboks_FOH</strong>
+            <small id="supportLabel">Support wird geprueft</small>
+          </span>
+        </a>
+
+        <nav class="tabbar" aria-label="Ansichten">
+          <button class="tab is-active" type="button" data-view="dashboard" title="Dashboard">Dashboard</button>
+          <button class="tab" type="button" data-view="groups" title="Gruppen">Gruppen</button>
+          <button class="tab" type="button" data-view="presets" title="Presets">Presets</button>
+          <button class="tab" type="button" data-view="diagnostics" title="Diagnose">Diagnose</button>
+        </nav>
+      </header>
+
+      <main class="workspace">
+        <section class="control-rail" aria-label="Verbindung">
+          <div class="rail-panel">
+            <div class="panel-heading">
+              <span>Connection</span>
+              <span id="secureBadge" class="status-pill">checking</span>
+            </div>
+
+            <button id="scanButton" class="primary-action" type="button">
+              <span class="button-icon" aria-hidden="true">+</span>
+              <span>Soundboks scannen</span>
+            </button>
+
+            <button id="demoButton" class="secondary-action" type="button">
+              Demo-Setup laden
+            </button>
+
+            <div id="browserWarning" class="callout" hidden></div>
+          </div>
+
+          <div class="rail-panel">
+            <div class="panel-heading">
+              <span>Safety</span>
+              <span id="activeLimitLabel" class="status-pill">Party</span>
+            </div>
+            <div class="limit-grid" id="limitGrid" aria-label="Volume Limits"></div>
+          </div>
+
+          <div class="rail-panel compact">
+            <div class="panel-heading">
+              <span>Session</span>
+              <span id="sessionState" class="status-pill">idle</span>
+            </div>
+            <dl class="mini-stats">
+              <div><dt>Devices</dt><dd id="deviceCount">0</dd></div>
+              <div><dt>Online</dt><dd id="onlineCount">0</dd></div>
+              <div><dt>Presets</dt><dd id="presetCount">0</dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="main-stage">
+          <section id="dashboardView" class="view is-active" aria-labelledby="dashboardTitle">
+            <div class="view-header">
+              <div>
+                <p class="eyebrow">Live control</p>
+                <h1 id="dashboardTitle">Speaker Dashboard</h1>
+              </div>
+              <div class="header-actions">
+                <button class="ghost-action" type="button" data-action="sync-all">State lesen</button>
+                <button class="ghost-action" type="button" data-action="disconnect-all">Alle trennen</button>
+              </div>
+            </div>
+            <div id="speakerGrid" class="speaker-grid" aria-live="polite"></div>
+          </section>
+
+          <section id="groupsView" class="view" aria-labelledby="groupsTitle">
+            <div class="view-header">
+              <div>
+                <p class="eyebrow">Routing</p>
+                <h1 id="groupsTitle">Custom Gruppen</h1>
+              </div>
+            </div>
+            <div id="groupsGrid" class="groups-grid"></div>
+          </section>
+
+          <section id="presetsView" class="view" aria-labelledby="presetsTitle">
+            <div class="view-header">
+              <div>
+                <p class="eyebrow">Local storage</p>
+                <h1 id="presetsTitle">Setups & Presets</h1>
+              </div>
+              <button class="primary-inline" type="button" data-action="save-preset">Aktuelles Setup speichern</button>
+            </div>
+            <div id="presetGrid" class="preset-grid"></div>
+          </section>
+
+          <section id="diagnosticsView" class="view" aria-labelledby="diagnosticsTitle">
+            <div class="view-header">
+              <div>
+                <p class="eyebrow">Raw BLE</p>
+                <h1 id="diagnosticsTitle">Diagnose</h1>
+              </div>
+              <button class="ghost-action" type="button" data-action="clear-log">Log leeren</button>
+            </div>
+            <div class="diagnostics-layout">
+              <pre id="diagnosticsLog" class="log-output" aria-live="polite"></pre>
+              <aside class="spec-panel">
+                <h2>Confirmed UUIDs</h2>
+                <p><strong>Volume</strong><br><code>445b9ffb... / 7649b19f...</code></p>
+                <p><strong>TeamUp</strong><br><code>46c69d1b... / 37bffa18...</code></p>
+                <p><strong>EQ + Stereo</strong><br><code>3bbed7cf... / 57a394fb... / 7d0d651e...</code></p>
+                <p class="muted">Open Fields werden bewusst nicht fuer MVP-Logik genutzt.</p>
+              </aside>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <div class="empty-visual" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <h2>Noch keine Speaker verbunden</h2>
+        <p>Starte einen Scan oder lade das Demo-Setup. Web Bluetooth funktioniert nur ueber HTTPS oder localhost und immer nach einer Nutzeraktion.</p>
+      </div>
+    </template>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
