@@ -16,6 +16,7 @@
   --error: #ff9f96;
   --info: #9ecaff;
   --hexagon: polygon(25% 6.7%, 75% 6.7%, 100% 50%, 75% 93.3%, 25% 93.3%, 0 50%);
+  --octagon: polygon(29.3% 0, 70.7% 0, 100% 29.3%, 100% 70.7%, 70.7% 100%, 29.3% 100%, 0 70.7%, 0 29.3%);
   --tap: 48px;
   --header-height: 64px;
   --rail-width: 300px;
@@ -353,7 +354,6 @@ h2 {
 
 .panel-heading,
 .card-heading,
-.meter-row,
 .preset-actions,
 .view-header,
 .header-actions,
@@ -636,15 +636,22 @@ h2 {
 
 .meter-wrap {
   display: grid;
-  gap: 15px;
+  gap: 18px;
   padding: 22px 20px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-raised);
 }
 
-.meter-row {
+.level-control-grid {
+  --level-size: 72px;
+  --step-size: 56px;
+  display: grid;
+  grid-template-columns: var(--step-size) var(--level-size) var(--step-size);
+  grid-template-rows: var(--step-size) var(--level-size) var(--step-size);
+  align-items: center;
   justify-content: center;
-  min-height: 82px;
+  justify-items: center;
+  gap: 8px 14px;
 }
 
 .volume-level {
@@ -654,8 +661,8 @@ h2 {
 
 .level-badge {
   display: block;
-  width: 76px;
-  height: 76px;
+  width: var(--level-size);
+  height: var(--level-size);
   color: var(--primary);
   shape-rendering: geometricPrecision;
 }
@@ -667,7 +674,18 @@ h2 {
   letter-spacing: 0;
 }
 
+.raw-volume {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
 .range {
+  --fader-gap: 12px;
+  --fader-position: 50%;
   width: 100%;
   height: 48px;
   margin: -8px 0;
@@ -679,8 +697,12 @@ h2 {
 .range::-webkit-slider-runnable-track {
   box-sizing: border-box;
   height: 8px;
-  border: 1.5px solid var(--primary);
-  background: transparent;
+  border: 0;
+  background:
+    url("assets/control-track-end-left.svg") left center / 4px 8px no-repeat,
+    url("assets/control-track-end-right.svg") right center / 4px 8px no-repeat,
+    linear-gradient(to right, transparent 0 3.25px, var(--primary) 3.25px, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(100% - 3.25px), transparent calc(100% - 3.25px) 100%) top / 100% 1.5px no-repeat,
+    linear-gradient(to right, transparent 0 3.25px, var(--primary) 3.25px, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(100% - 3.25px), transparent calc(100% - 3.25px) 100%) bottom / 100% 1.5px no-repeat;
 }
 
 .range::-webkit-slider-thumb {
@@ -696,8 +718,12 @@ h2 {
 .range::-moz-range-track {
   box-sizing: border-box;
   height: 8px;
-  border: 1.5px solid var(--primary);
-  background: transparent;
+  border: 0;
+  background:
+    url("assets/control-track-end-left.svg") left center / 4px 8px no-repeat,
+    url("assets/control-track-end-right.svg") right center / 4px 8px no-repeat,
+    linear-gradient(to right, transparent 0 3.25px, var(--primary) 3.25px, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(100% - 3.25px), transparent calc(100% - 3.25px) 100%) top / 100% 1.5px no-repeat,
+    linear-gradient(to right, transparent 0 3.25px, var(--primary) 3.25px, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(100% - 3.25px), transparent calc(100% - 3.25px) 100%) bottom / 100% 1.5px no-repeat;
 }
 
 .range::-moz-range-progress {
@@ -720,15 +746,6 @@ h2 {
   text-transform: uppercase;
 }
 
-.step-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
-  padding: 16px 20px 20px;
-  border-bottom: 1px solid var(--line);
-}
-
-.step-button,
 .role-button,
 .preset-button {
   min-width: 0;
@@ -738,10 +755,41 @@ h2 {
 }
 
 .step-button {
+  --step-fill: var(--surface-raised);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: var(--step-size);
+  height: var(--step-size);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: var(--primary);
+  clip-path: var(--octagon);
+  color: var(--ink);
   font-size: 0.62rem;
 }
 
-.step-button:hover,
+.step-button::before {
+  position: absolute;
+  inset: 1.5px;
+  z-index: 0;
+  background: var(--step-fill);
+  clip-path: var(--octagon);
+  content: "";
+  transition: background 160ms ease;
+}
+
+.step-button span {
+  position: relative;
+  z-index: 1;
+}
+
+.step-button:hover {
+  --step-fill: var(--surface-strong);
+}
+
 .role-button:hover,
 .preset-button:hover {
   border-color: var(--line-strong);
@@ -855,6 +903,8 @@ h2 {
 }
 
 .band-control input {
+  --fader-gap: 12px;
+  --fader-position: 50%;
   width: 44px;
   height: 116px;
   margin: 0;
@@ -869,8 +919,10 @@ h2 {
   box-sizing: border-box;
   width: 8px;
   height: 100%;
-  border: 1.5px solid var(--primary);
-  background: transparent;
+  border: 0;
+  background:
+    linear-gradient(to bottom, var(--primary) 0, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) 100%) left / 1.5px 100% no-repeat,
+    linear-gradient(to bottom, var(--primary) 0, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) 100%) right / 1.5px 100% no-repeat;
 }
 
 .band-control input::-webkit-slider-thumb {
@@ -886,8 +938,10 @@ h2 {
 .band-control input::-moz-range-track {
   box-sizing: border-box;
   width: 8px;
-  border: 1.5px solid var(--primary);
-  background: transparent;
+  border: 0;
+  background:
+    linear-gradient(to bottom, var(--primary) 0, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) 100%) left / 1.5px 100% no-repeat,
+    linear-gradient(to bottom, var(--primary) 0, var(--primary) calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) - var(--fader-gap)), transparent calc(var(--fader-position) + var(--fader-gap)), var(--primary) calc(var(--fader-position) + var(--fader-gap)), var(--primary) 100%) right / 1.5px 100% no-repeat;
 }
 
 .band-control input::-moz-range-thumb {
@@ -1304,14 +1358,10 @@ h2 {
     padding: 17px 14px 15px;
   }
 
-  .level-badge {
-    width: 68px;
-    height: 68px;
-  }
-
-  .step-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    padding: 12px 14px 15px;
+  .level-control-grid {
+    --level-size: 68px;
+    --step-size: 52px;
+    gap: 8px 10px;
   }
 
   .control-section,
@@ -1395,9 +1445,10 @@ h2 {
     gap: 4px;
   }
 
-  .level-badge {
-    width: 60px;
-    height: 60px;
+  .level-control-grid {
+    --level-size: 60px;
+    --step-size: 48px;
+    gap: 7px 8px;
   }
 
   .band-control input {
@@ -1406,13 +1457,13 @@ h2 {
 
   .band-control input::-webkit-slider-thumb {
     width: 38px;
-    height: 19px;
+    height: 21px;
     margin-left: -15px;
   }
 
   .band-control input::-moz-range-thumb {
     width: 38px;
-    height: 19px;
+    height: 21px;
   }
 }
 

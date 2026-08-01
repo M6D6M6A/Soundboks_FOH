@@ -214,7 +214,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260802-level-1").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260802-level-controls-1").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -297,7 +297,7 @@
         const speaker = getSpeaker(speakerId);
         if (!speaker) return;
         speaker.rawVolume = rawVolume;
-        target.style.setProperty("--range-progress", `${Math.round((rawVolume / 255) * 100)}%`);
+        target.style.setProperty("--fader-position", faderPosition(rawVolume, 0, 255));
         updateVolumeDom(speakerId, rawVolume);
         scheduleWrite(`volume:${speakerId}`, () => setVolume(speakerId, rawVolume), 160);
       }
@@ -307,6 +307,7 @@
         const control = target.closest(".band-control");
         const valueLabel = control?.querySelector(".band-value");
         const curveBars = target.closest(".eq-panel")?.querySelectorAll(".eq-curve i");
+        target.style.setProperty("--fader-position", faderPosition(value, -10, 10, true));
         if (valueLabel) valueLabel.textContent = `${value > 0 ? "+" : ""}${value}`;
         if (curveBars?.[Number(target.dataset.band)]) {
           curveBars[Number(target.dataset.band)].style.height = `${44 + value * 3}px`;
@@ -731,6 +732,7 @@
     const percent = Math.round((raw / 255) * 100);
     const level = levelNumberFromRaw(raw);
     const levelMaskId = `level-mask-${cardIndex}`;
+    const volumeFaderPosition = faderPosition(raw, 0, 255);
 
     return `
       <article class="speaker-card" data-card-speaker="${escapeAttr(speaker.id)}">
@@ -743,7 +745,11 @@
         </div>
 
         <div class="meter-wrap">
-          <div class="meter-row">
+          <div class="level-control-grid" role="group" aria-label="Volume controls">
+            ${stepButton(speaker.id, "min", 0, "set", disabled)}
+            <output class="raw-volume" data-raw-volume="${escapeAttr(speaker.id)}" aria-label="Raw volume ${raw} von 255">${raw}/255</output>
+            ${stepButton(speaker.id, "max", 255, "set", disabled)}
+            ${stepButton(speaker.id, "-1", -1, "step", disabled)}
             <div class="volume-level">
               <svg class="level-badge" viewBox="0 0 100 100" role="img" aria-label="Level ${level}">
                 <defs>
@@ -756,22 +762,16 @@
                 <polygon points="29,1 71,1 99,29 99,71 71,99 29,99 1,71 1,29" fill="currentColor" mask="url(#${levelMaskId})"></polygon>
               </svg>
             </div>
+            ${stepButton(speaker.id, "+1", 1, "step", disabled)}
+            ${stepButton(speaker.id, "-10", -10, "step", disabled)}
+            ${stepButton(speaker.id, "mid", 128, "set", disabled)}
+            ${stepButton(speaker.id, "+10", 10, "step", disabled)}
           </div>
           <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
-            style="--range-progress: ${percent}%"
+            style="--fader-position: ${volumeFaderPosition}"
             aria-label="Raw Volume ${escapeAttr(speaker.name || speaker.id)}"
             data-control="volume" data-speaker-id="${escapeAttr(speaker.id)}">
-          <p class="meter-caption"><span>${percent}% Rohpegel</span><span>Limit: ${escapeHtml(state.activeLimit)}</span></p>
-        </div>
-
-        <div class="step-grid">
-          ${stepButton(speaker.id, "min", 0, "set", disabled)}
-          ${stepButton(speaker.id, "-10", -10, "step", disabled)}
-          ${stepButton(speaker.id, "-1", -1, "step", disabled)}
-          ${stepButton(speaker.id, "mid", 128, "set", disabled)}
-          ${stepButton(speaker.id, "+1", 1, "step", disabled)}
-          ${stepButton(speaker.id, "+10", 10, "step", disabled)}
-          ${stepButton(speaker.id, "max", 255, "set", disabled)}
+          <p class="meter-caption"><span data-volume-percent="${escapeAttr(speaker.id)}">${percent}% Rohpegel</span><span>Limit: ${escapeHtml(state.activeLimit)}</span></p>
         </div>
 
         <div class="control-section">
@@ -814,6 +814,7 @@
                 <label class="band-control">
                   <span class="band-value">${numericValue > 0 ? "+" : ""}${numericValue}</span>
                   <input type="range" min="-10" max="10" value="${numericValue}" ${disabled}
+                    style="--fader-position: ${faderPosition(numericValue, -10, 10, true)}"
                     data-control="band" data-band="${index}" data-speaker-id="${escapeAttr(speaker.id)}">
                   <span class="band-label">${EQ_BANDS[index]}</span>
                 </label>
@@ -834,7 +835,7 @@
   function stepButton(speakerId, label, value, mode, disabled) {
     const action = mode === "set" ? "volume-set" : "volume-step";
     const data = mode === "set" ? `data-value="${value}"` : `data-delta="${value}"`;
-    return `<button class="step-button" type="button" ${disabled} data-action="${action}" ${data} data-speaker-id="${escapeAttr(speakerId)}">${label}</button>`;
+    return `<button class="step-button" type="button" ${disabled} data-action="${action}" ${data} data-speaker-id="${escapeAttr(speakerId)}"><span>${escapeHtml(label)}</span></button>`;
   }
 
   function renderGroups() {
@@ -936,11 +937,18 @@
 
   function updateVolumeDom(speakerId, rawVolume) {
     const level = document.querySelector(`[data-level-readout="${cssEscape(speakerId)}"]`);
+    const raw = document.querySelector(`[data-raw-volume="${cssEscape(speakerId)}"]`);
+    const percent = document.querySelector(`[data-volume-percent="${cssEscape(speakerId)}"]`);
     if (level) {
       const levelNumber = levelNumberFromRaw(rawVolume);
       level.textContent = String(levelNumber);
       level.closest(".level-badge")?.setAttribute("aria-label", `Level ${levelNumber}`);
     }
+    if (raw) {
+      raw.textContent = `${rawVolume}/255`;
+      raw.setAttribute("aria-label", `Raw volume ${rawVolume} von 255`);
+    }
+    if (percent) percent.textContent = `${Math.round((rawVolume / 255) * 100)}% Rohpegel`;
   }
 
   function scheduleWrite(key, fn, delay) {
@@ -1016,6 +1024,15 @@
     if (value <= 240) return 9;
     if (value <= 254) return 10;
     return 11;
+  }
+
+  function faderPosition(value, min, max, reverse = false) {
+    const ratio = (clamp(Number(value), min, max) - min) / (max - min);
+    const position = reverse ? 1 - ratio : ratio;
+    const percent = Number((position * 100).toFixed(4));
+    const pixelOffset = Number(((0.5 - position) * 21).toFixed(3));
+    const operator = pixelOffset < 0 ? "-" : "+";
+    return `calc(${percent}% ${operator} ${Math.abs(pixelOffset)}px)`;
   }
 
   function decodeEq(value) {

@@ -54,7 +54,7 @@ Die aktuelle Version bietet:
 - Tablet: kompakte dreispaltige Session-Uebersicht
 - Mobile: Bottom-Navigation, einspaltige Controls und Safe-Area-Unterstuetzung
 - Monochromes, rasterbasiertes UI mit der Markenfarbe `#d95007`
-- konturierte Oktagon-Fader und ausgestanzte Levelanzeige im eigenen Hexagon-Design
+- konturierte Oktagon-Fader mit transparenter Schienenluecke und radialem Level-Bedienfeld
 - grosse Touch-Ziele, sichtbare Fokuszustaende und Reduced-Motion-Support
 
 ## Naechste technische Schritte

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 8" aria-hidden="true">
+  <path
+    d="M.75 .75 L3.25 2.67v2.66L.75 7.25"
+    fill="none"
+    stroke="#d95007"
+    stroke-width="1.5"
+    stroke-linecap="square"
+    stroke-linejoin="miter"
+  />
+</svg>

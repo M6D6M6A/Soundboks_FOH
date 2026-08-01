@@ -1,11 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" aria-hidden="true">
-  <polygon
-    points="8,1 40,1 47,6 47,18 40,23 8,23 1,18 1,6"
-    fill="none"
-    stroke="#d95007"
-    stroke-width="1.75"
-    stroke-linecap="square"
-    stroke-linejoin="miter"
-    vector-effect="non-scaling-stroke"
+  <path
+    d="M8 1h32l7 5v12l-7 5H8l-7-5V6zM8 10l2-2h28l2 2v4l-2 2H10l-2-2z"
+    fill="#d95007"
+    fill-rule="evenodd"
   />
 </svg>
