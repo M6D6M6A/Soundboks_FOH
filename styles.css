@@ -643,82 +643,28 @@ h2 {
 }
 
 .meter-row {
-  align-items: stretch;
-}
-
-.volume-poti {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-content: center;
   justify-content: center;
-  width: 126px;
-  height: 110px;
-  padding: 15px 20px;
-  background: url("assets/control-poti.svg") center / 100% 100% no-repeat;
-  font-variant-numeric: tabular-nums;
-}
-
-.volume-poti-label {
-  grid-column: 1 / -1;
-  align-self: end;
-  color: var(--primary);
-  font-size: 0.55rem;
-  font-weight: 700;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.volume-poti strong {
-  align-self: end;
-  font-size: 2.65rem;
-  font-weight: 400;
-  line-height: 0.95;
-}
-
-.volume-poti-scale {
-  align-self: end;
-  padding-bottom: 4px;
-  color: var(--muted);
-  font-size: 0.62rem;
+  min-height: 82px;
 }
 
 .volume-level {
   display: grid;
-  align-content: center;
-  justify-items: end;
-  gap: 8px;
+  place-items: center;
 }
 
 .level-badge {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
+  display: block;
   width: 76px;
-  height: 66px;
-  isolation: isolate;
-  color: var(--ink);
-  font-size: 0.9rem;
-  font-weight: 700;
-  text-align: center;
+  height: 76px;
+  color: var(--primary);
+  shape-rendering: geometricPrecision;
 }
 
-.level-badge::before,
-.level-badge::after {
-  position: absolute;
-  clip-path: var(--hexagon);
-  content: "";
-}
-
-.level-badge::before {
-  inset: 0;
-  z-index: -2;
-  background: var(--primary);
-}
-
-.level-badge::after {
-  inset: 1px;
-  z-index: -1;
-  background: var(--surface-raised);
+.level-badge-cutout {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .range {
@@ -1358,19 +1304,9 @@ h2 {
     padding: 17px 14px 15px;
   }
 
-  .volume-poti {
-    width: 112px;
-    height: 98px;
-    padding: 13px 16px;
-  }
-
-  .volume-poti strong {
-    font-size: 2.35rem;
-  }
-
   .level-badge {
     width: 68px;
-    height: 58px;
+    height: 68px;
   }
 
   .step-grid {
@@ -1459,18 +1395,9 @@ h2 {
     gap: 4px;
   }
 
-  .volume-poti {
-    width: 102px;
-    height: 90px;
-  }
-
-  .volume-poti strong {
-    font-size: 2.05rem;
-  }
-
   .level-badge {
     width: 60px;
-    height: 52px;
+    height: 60px;
   }
 
   .band-control input {

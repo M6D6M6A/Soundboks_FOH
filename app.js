@@ -119,7 +119,6 @@
       next.teamUpMode = await this.readTeamUpMode();
       next.stereoRole = await this.readStereoRole();
       next.eq = await this.readEq();
-      next.appLevel = appLevelFromRaw(next.rawVolume);
       this.onUpdate(this.speakerId, next);
       return next;
     }
@@ -177,7 +176,7 @@
     handleNotification(key, value) {
       if (key === "volume") {
         const rawVolume = value.getUint8(0);
-        this.onUpdate(this.speakerId, { rawVolume, appLevel: appLevelFromRaw(rawVolume) });
+        this.onUpdate(this.speakerId, { rawVolume });
         this.onLog("notification", this.speakerId, `volume ${rawVolume}`);
       }
       if (key === "teamUpMode") {
@@ -215,7 +214,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260802-fader-1").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260802-level-1").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -298,7 +297,6 @@
         const speaker = getSpeaker(speakerId);
         if (!speaker) return;
         speaker.rawVolume = rawVolume;
-        speaker.appLevel = appLevelFromRaw(rawVolume);
         target.style.setProperty("--range-progress", `${Math.round((rawVolume / 255) * 100)}%`);
         updateVolumeDom(speakerId, rawVolume);
         scheduleWrite(`volume:${speakerId}`, () => setVolume(speakerId, rawVolume), 160);
@@ -344,7 +342,6 @@
         bluetoothDeviceId: device.id,
         connectionState: "connecting",
         rawVolume: 0,
-        appLevel: "L0",
         teamUpMode: "solo",
         stereoRole: "M",
         eq: structuredCloneSafe(DEFAULT_EQ),
@@ -416,7 +413,6 @@
       connectionState: "connected",
       demo: true,
       rawVolume: 74,
-      appLevel: appLevelFromRaw(74),
       teamUpMode: "solo",
       stereoRole: "L",
       eq: { preset: "dancefloor", bands: [2, 1, 0, 2, 4, 3] },
@@ -429,7 +425,6 @@
       connectionState: "connected",
       demo: true,
       rawVolume: 70,
-      appLevel: appLevelFromRaw(70),
       teamUpMode: "solo",
       stereoRole: "R",
       eq: { preset: "stage", bands: [-2, -1, 0, 1, 3, 4] },
@@ -500,7 +495,6 @@
     const limit = getActiveLimit();
     const rawVolume = clamp(value, limit.minRaw, limit.maxRaw);
     speaker.rawVolume = rawVolume;
-    speaker.appLevel = appLevelFromRaw(rawVolume);
     if (!speaker.demo) {
       await requireClient(speakerId).writeVolume(rawVolume);
     } else {
@@ -728,13 +722,15 @@
     grid.innerHTML = state.speakers.map(renderSpeakerCard).join("");
   }
 
-  function renderSpeakerCard(speaker) {
+  function renderSpeakerCard(speaker, cardIndex) {
     const online = isOnline(speaker);
     const eq = speaker.eq || structuredCloneSafe(DEFAULT_EQ);
     const disabled = online ? "" : "disabled";
     const statusClass = online ? "ok" : speaker.connectionState === "error" ? "error" : "warn";
     const raw = Number(speaker.rawVolume || 0);
     const percent = Math.round((raw / 255) * 100);
+    const level = levelNumberFromRaw(raw);
+    const levelMaskId = `level-mask-${cardIndex}`;
 
     return `
       <article class="speaker-card" data-card-speaker="${escapeAttr(speaker.id)}">
@@ -748,14 +744,17 @@
 
         <div class="meter-wrap">
           <div class="meter-row">
-            <div class="volume-poti" aria-label="Raw volume ${raw} von 255">
-              <span class="volume-poti-label">Raw</span>
-              <strong data-volume-readout="${escapeAttr(speaker.id)}">${raw}</strong>
-              <span class="volume-poti-scale">/ 255</span>
-            </div>
             <div class="volume-level">
-              <span class="section-label">App Level</span>
-              <span class="level-badge" data-level-readout="${escapeAttr(speaker.id)}">${escapeHtml(appLevelFromRaw(raw))}</span>
+              <svg class="level-badge" viewBox="0 0 100 100" role="img" aria-label="Level ${level}">
+                <defs>
+                  <mask id="${levelMaskId}" x="0" y="0" width="100" height="100" maskUnits="userSpaceOnUse">
+                    <rect width="100" height="100" fill="#fff"></rect>
+                    <text class="level-badge-cutout" x="50" y="51" text-anchor="middle" dominant-baseline="middle" fill="#000"
+                      data-level-readout="${escapeAttr(speaker.id)}">${level}</text>
+                  </mask>
+                </defs>
+                <polygon points="29,1 71,1 99,29 99,71 71,99 29,99 1,71 1,29" fill="currentColor" mask="url(#${levelMaskId})"></polygon>
+              </svg>
             </div>
           </div>
           <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
@@ -931,19 +930,17 @@
     Object.assign(speaker, patch, { lastSeenAt: Date.now() });
     if (typeof speaker.rawVolume === "number") {
       speaker.rawVolume = clamp(speaker.rawVolume, 0, 255);
-      speaker.appLevel = appLevelFromRaw(speaker.rawVolume);
     }
     render();
   }
 
   function updateVolumeDom(speakerId, rawVolume) {
-    const readout = document.querySelector(`[data-volume-readout="${cssEscape(speakerId)}"]`);
     const level = document.querySelector(`[data-level-readout="${cssEscape(speakerId)}"]`);
-    if (readout) {
-      readout.textContent = String(rawVolume);
-      readout.closest(".volume-poti")?.setAttribute("aria-label", `Raw volume ${rawVolume} von 255`);
+    if (level) {
+      const levelNumber = levelNumberFromRaw(rawVolume);
+      level.textContent = String(levelNumber);
+      level.closest(".level-badge")?.setAttribute("aria-label", `Level ${levelNumber}`);
     }
-    if (level) level.textContent = appLevelFromRaw(rawVolume);
   }
 
   function scheduleWrite(key, fn, delay) {
@@ -1005,20 +1002,20 @@
     return { ready: true, secureContext, bluetooth, reason: "ready" };
   }
 
-  function appLevelFromRaw(raw) {
+  function levelNumberFromRaw(raw) {
     const value = clamp(Number(raw), 0, 255);
-    if (value === 0) return "L0";
-    if (value <= 16) return "L1";
-    if (value <= 44) return "L2";
-    if (value <= 72) return "L3";
-    if (value <= 100) return "L4";
-    if (value <= 128) return "L5";
-    if (value <= 156) return "L6";
-    if (value <= 184) return "L7";
-    if (value <= 212) return "L8";
-    if (value <= 240) return "L9";
-    if (value <= 254) return "L10";
-    return "L11";
+    if (value === 0) return 0;
+    if (value <= 16) return 1;
+    if (value <= 44) return 2;
+    if (value <= 72) return 3;
+    if (value <= 100) return 4;
+    if (value <= 128) return 5;
+    if (value <= 156) return 6;
+    if (value <= 184) return 7;
+    if (value <= 212) return 8;
+    if (value <= 240) return 9;
+    if (value <= 254) return 10;
+    return 11;
   }
 
   function decodeEq(value) {

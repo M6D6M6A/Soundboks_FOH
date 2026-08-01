@@ -1,4 +1,4 @@
-const CACHE_NAME = "soundboks-foh-v8";
+const CACHE_NAME = "soundboks-foh-v9";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,7 +6,6 @@ const ASSETS = [
   "./app.js",
   "./manifest.webmanifest",
   "./assets/icon.svg",
-  "./assets/control-poti.svg",
   "./assets/control-slider-thumb.svg",
   "./assets/control-slider-thumb-vertical.svg"
 ];

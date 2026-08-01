@@ -252,7 +252,6 @@ interface Speaker {
   bluetoothDeviceId?: string;
   connectionState: ConnectionState;
   rawVolume?: number;
-  appLevel?: number;
   teamUpMode?: TeamUpMode;
   stereoRole?: StereoRole;
   eq?: EqState;
