@@ -200,6 +200,10 @@
 
   async function init() {
     state.support = detectSupport();
+    const requestedView = location.hash.slice(1);
+    if (["dashboard", "groups", "presets", "diagnostics"].includes(requestedView)) {
+      state.view = requestedView;
+    }
     bindEvents();
     await loadPresets();
     render();
@@ -207,8 +211,11 @@
       loadDemoSetup();
     }
 
-    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-      navigator.serviceWorker.register("sw.js?v=20260624-eq-logo-2").catch((error) => {
+    if (
+      "serviceWorker" in navigator &&
+      (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
+    ) {
+      navigator.serviceWorker.register("sw.js?v=20260801-monolyt-1").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -219,12 +226,28 @@
   function bindEvents() {
     $("#scanButton").addEventListener("click", scanAndConnect);
     $("#demoButton").addEventListener("click", loadDemoSetup);
+    $(".tabbar").addEventListener("keydown", (event) => {
+      const currentTab = event.target.closest(".tab");
+      if (!currentTab || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+
+      const tabs = $$(".tab");
+      const currentIndex = tabs.indexOf(currentTab);
+      let nextIndex = event.key === "ArrowLeft" ? currentIndex - 1 : currentIndex + 1;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = tabs.length - 1;
+      nextIndex = (nextIndex + tabs.length) % tabs.length;
+
+      event.preventDefault();
+      setView(tabs[nextIndex].dataset.view);
+      tabs[nextIndex].focus();
+    });
 
     document.addEventListener("click", async (event) => {
-      const button = event.target.closest("button[data-action], button[data-view], button[data-limit]");
+      const button = event.target.closest("[data-view], button[data-action], button[data-limit]");
       if (!button) return;
 
       if (button.dataset.view) {
+        event.preventDefault();
         setView(button.dataset.view);
         return;
       }
@@ -268,14 +291,29 @@
     document.addEventListener("input", (event) => {
       const target = event.target;
       const speakerId = target.dataset.speakerId;
-      if (!speakerId || target.dataset.control !== "volume") return;
-      const rawVolume = clamp(Number(target.value), 0, 255);
-      const speaker = getSpeaker(speakerId);
-      if (!speaker) return;
-      speaker.rawVolume = rawVolume;
-      speaker.appLevel = appLevelFromRaw(rawVolume);
-      updateVolumeDom(speakerId, rawVolume);
-      scheduleWrite(`volume:${speakerId}`, () => setVolume(speakerId, rawVolume), 160);
+      if (!speakerId) return;
+
+      if (target.dataset.control === "volume") {
+        const rawVolume = clamp(Number(target.value), 0, 255);
+        const speaker = getSpeaker(speakerId);
+        if (!speaker) return;
+        speaker.rawVolume = rawVolume;
+        speaker.appLevel = appLevelFromRaw(rawVolume);
+        target.style.setProperty("--range-progress", `${Math.round((rawVolume / 255) * 100)}%`);
+        updateVolumeDom(speakerId, rawVolume);
+        scheduleWrite(`volume:${speakerId}`, () => setVolume(speakerId, rawVolume), 160);
+      }
+
+      if (target.dataset.control === "band") {
+        const value = clamp(Number(target.value), -10, 10);
+        const control = target.closest(".band-control");
+        const valueLabel = control?.querySelector(".band-value");
+        const curveBars = target.closest(".eq-panel")?.querySelectorAll(".eq-curve i");
+        if (valueLabel) valueLabel.textContent = `${value > 0 ? "+" : ""}${value}`;
+        if (curveBars?.[Number(target.dataset.band)]) {
+          curveBars[Number(target.dataset.band)].style.height = `${44 + value * 3}px`;
+        }
+      }
     });
   }
 
@@ -646,8 +684,20 @@
   }
 
   function renderTabs() {
-    $$(".tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === state.view));
-    $$(".view").forEach((view) => view.classList.toggle("is-active", view.id === `${state.view}View`));
+    document.body.dataset.view = state.view;
+    $$(".tab").forEach((tab) => {
+      const active = tab.dataset.view === state.view;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+      if (active) tab.setAttribute("aria-current", "page");
+      else tab.removeAttribute("aria-current");
+    });
+    $$(".view").forEach((view) => {
+      const active = view.id === `${state.view}View`;
+      view.classList.toggle("is-active", active);
+      view.setAttribute("aria-hidden", String(!active));
+    });
   }
 
   function renderLimits() {
@@ -698,13 +748,21 @@
 
         <div class="meter-wrap">
           <div class="meter-row">
-            <strong data-volume-readout="${escapeAttr(speaker.id)}">${raw}</strong>
-            <span class="level-badge" data-level-readout="${escapeAttr(speaker.id)}">${escapeHtml(appLevelFromRaw(raw))}</span>
+            <div class="volume-poti" aria-label="Raw volume ${raw} von 255">
+              <span class="volume-poti-label">Raw</span>
+              <strong data-volume-readout="${escapeAttr(speaker.id)}">${raw}</strong>
+              <span class="volume-poti-scale">/ 255</span>
+            </div>
+            <div class="volume-level">
+              <span class="section-label">App Level</span>
+              <span class="level-badge" data-level-readout="${escapeAttr(speaker.id)}">${escapeHtml(appLevelFromRaw(raw))}</span>
+            </div>
           </div>
           <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
+            style="--range-progress: ${percent}%"
             aria-label="Raw Volume ${escapeAttr(speaker.name || speaker.id)}"
             data-control="volume" data-speaker-id="${escapeAttr(speaker.id)}">
-          <p class="muted">${percent}% raw output, begrenzt durch ${escapeHtml(state.activeLimit)}</p>
+          <p class="meter-caption"><span>${percent}% Rohpegel</span><span>Limit: ${escapeHtml(state.activeLimit)}</span></p>
         </div>
 
         <div class="step-grid">
@@ -719,7 +777,7 @@
 
         <div class="control-section">
           <span class="section-label">Stereo Role</span>
-          <div class="segmented">
+          <div class="segmented" aria-label="Stereo Role">
             ${ROLE_VALUES.map((role) => `
               <button class="role-button ${speaker.stereoRole === role ? "is-active" : ""}" type="button" ${disabled}
                 data-action="role" data-role="${role}" data-speaker-id="${escapeAttr(speaker.id)}">${role}</button>
@@ -766,7 +824,7 @@
         </div>
 
         <div class="header-actions">
-          <button class="ghost-action" type="button" data-action="read-state" data-speaker-id="${escapeAttr(speaker.id)}" ${disabled}>State lesen</button>
+          <button class="ghost-action" type="button" data-action="read-state" data-speaker-id="${escapeAttr(speaker.id)}" ${disabled}>Status lesen</button>
           <button class="ghost-action" type="button" data-action="disconnect" data-speaker-id="${escapeAttr(speaker.id)}">Trennen</button>
         </div>
         ${speaker.error ? `<div class="callout">${escapeHtml(speaker.error)}</div>` : ""}
@@ -822,7 +880,7 @@
     grid.innerHTML = state.presets.map((preset) => `
       <article class="preset-card">
         <h2>${escapeHtml(preset.name)}</h2>
-        <p class="muted">${new Date(preset.updatedAt).toLocaleString("de-DE")} · ${Object.keys(preset.speakerStates).length} Speaker</p>
+        <p class="muted">${new Date(preset.updatedAt).toLocaleString("de-DE")} / ${Object.keys(preset.speakerStates).length} Speaker</p>
         <p>Limit: <strong>${escapeHtml(preset.volumeLimit?.name || "Custom")}</strong></p>
         <div class="preset-actions">
           <button class="primary-inline" type="button" data-action="apply-preset" data-preset-id="${escapeAttr(preset.id)}">Anwenden</button>
@@ -849,8 +907,18 @@
   }
 
   function setView(view) {
+    if (!["dashboard", "groups", "presets", "diagnostics"].includes(view)) return;
     state.view = view;
     render();
+    history.replaceState(null, "", `${location.pathname}${location.search}#${view}`);
+    window.requestAnimationFrame(() => {
+      const target = $(".main-stage");
+      if (!target) return;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const topOffset = window.innerWidth <= 760 ? 72 : 88;
+      const top = target.getBoundingClientRect().top + window.scrollY - topOffset;
+      window.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? "auto" : "smooth" });
+    });
   }
 
   function setSessionState(value) {
@@ -871,7 +939,10 @@
   function updateVolumeDom(speakerId, rawVolume) {
     const readout = document.querySelector(`[data-volume-readout="${cssEscape(speakerId)}"]`);
     const level = document.querySelector(`[data-level-readout="${cssEscape(speakerId)}"]`);
-    if (readout) readout.textContent = String(rawVolume);
+    if (readout) {
+      readout.textContent = String(rawVolume);
+      readout.closest(".volume-poti")?.setAttribute("aria-label", `Raw volume ${rawVolume} von 255`);
+    }
     if (level) level.textContent = appLevelFromRaw(rawVolume);
   }
 

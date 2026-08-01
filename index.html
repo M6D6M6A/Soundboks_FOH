@@ -4,68 +4,84 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#121212">
+    <meta name="color-scheme" content="dark">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Soundboks_FOH steuert SOUNDBOKS 4 Lautsprecher lokal ueber Web Bluetooth.">
     <title>Soundboks_FOH</title>
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-    <link rel="manifest" href="manifest.webmanifest?v=20260624-eq-logo-2">
-    <link rel="stylesheet" href="styles.css?v=20260624-eq-logo-2">
+    <link rel="manifest" href="manifest.webmanifest?v=20260801-monolyt-1">
+    <link rel="stylesheet" href="styles.css?v=20260801-monolyt-1">
   </head>
   <body>
     <noscript>
       <div class="noscript">Soundboks_FOH braucht JavaScript, um Bluetooth-Geraete zu steuern.</div>
     </noscript>
 
+    <a class="skip-link" href="#mainContent">Zum Inhalt</a>
+
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#dashboard" aria-label="Soundboks_FOH Dashboard">
+        <a class="brand" href="#dashboard" data-view="dashboard" aria-label="Soundboks_FOH Dashboard">
           <span class="brand-mark" aria-hidden="true">
             <span class="mark-core"></span>
             <span class="mark-bars"><i></i><i></i><i></i></span>
             <span class="mark-wave"></span>
           </span>
-          <span>
-            <strong>Soundboks_FOH</strong>
+          <span class="brand-copy">
+            <strong>SOUNDBOKS_FOH</strong>
             <small id="supportLabel">Support wird geprueft</small>
           </span>
         </a>
 
-        <nav class="tabbar" aria-label="Ansichten">
-          <button class="tab is-active" type="button" data-view="dashboard" title="Dashboard">Dashboard</button>
-          <button class="tab" type="button" data-view="groups" title="Gruppen">Gruppen</button>
-          <button class="tab" type="button" data-view="presets" title="Presets">Presets</button>
-          <button class="tab" type="button" data-view="diagnostics" title="Diagnose">Diagnose</button>
+        <nav class="tabbar" aria-label="Ansichten" role="tablist">
+          <button class="tab is-active" type="button" role="tab" tabindex="0" data-view="dashboard" aria-controls="dashboardView" aria-selected="true" title="Dashboard">
+            <span class="tab-index" aria-hidden="true">01</span><span>Dashboard</span>
+          </button>
+          <button class="tab" type="button" role="tab" tabindex="-1" data-view="groups" aria-controls="groupsView" aria-selected="false" title="Gruppen">
+            <span class="tab-index" aria-hidden="true">02</span><span>Gruppen</span>
+          </button>
+          <button class="tab" type="button" role="tab" tabindex="-1" data-view="presets" aria-controls="presetsView" aria-selected="false" title="Setups">
+            <span class="tab-index" aria-hidden="true">03</span><span>Setups</span>
+          </button>
+          <button class="tab" type="button" role="tab" tabindex="-1" data-view="diagnostics" aria-controls="diagnosticsView" aria-selected="false" title="Diagnose">
+            <span class="tab-index" aria-hidden="true">04</span><span>Diagnose</span>
+          </button>
         </nav>
       </header>
 
-      <main class="workspace">
+      <main id="mainContent" class="workspace">
         <section class="control-rail" aria-label="Verbindung">
-          <div class="rail-panel">
+          <div class="rail-panel connection-panel">
             <div class="panel-heading">
-              <span>Connection</span>
+              <span>Verbindung</span>
               <span id="secureBadge" class="status-pill">checking</span>
             </div>
 
-            <button id="scanButton" class="primary-action" type="button">
-              <span class="button-icon" aria-hidden="true">+</span>
-              <span>Soundboks scannen</span>
-            </button>
+            <div class="connection-actions">
+              <button id="scanButton" class="primary-action" type="button">
+                <span class="button-icon" aria-hidden="true">+</span>
+                <span>Soundboks scannen</span>
+              </button>
 
-            <button id="demoButton" class="secondary-action" type="button">
-              Demo-Setup laden
-            </button>
+              <button id="demoButton" class="secondary-action" type="button">
+                Demo laden
+              </button>
+            </div>
 
             <div id="browserWarning" class="callout" hidden></div>
           </div>
 
-          <div class="rail-panel">
+          <div class="rail-panel safety-panel">
             <div class="panel-heading">
-              <span>Safety</span>
+              <span>Pegellimit</span>
               <span id="activeLimitLabel" class="status-pill">Party</span>
             </div>
             <div class="limit-grid" id="limitGrid" aria-label="Volume Limits"></div>
           </div>
 
-          <div class="rail-panel compact">
+          <div class="rail-panel session-panel">
             <div class="panel-heading">
               <span>Session</span>
               <span id="sessionState" class="status-pill">idle</span>
@@ -79,21 +95,21 @@
         </section>
 
         <section class="main-stage">
-          <section id="dashboardView" class="view is-active" aria-labelledby="dashboardTitle">
+          <section id="dashboardView" class="view is-active" role="tabpanel" aria-labelledby="dashboardTitle">
             <div class="view-header">
               <div>
-                <p class="eyebrow">Live control</p>
+                <p class="eyebrow">Live-Steuerung</p>
                 <h1 id="dashboardTitle">Speaker Dashboard</h1>
               </div>
               <div class="header-actions">
-                <button class="ghost-action" type="button" data-action="sync-all">State lesen</button>
+                <button class="ghost-action" type="button" data-action="sync-all">Status lesen</button>
                 <button class="ghost-action" type="button" data-action="disconnect-all">Alle trennen</button>
               </div>
             </div>
             <div id="speakerGrid" class="speaker-grid" aria-live="polite"></div>
           </section>
 
-          <section id="groupsView" class="view" aria-labelledby="groupsTitle">
+          <section id="groupsView" class="view" role="tabpanel" aria-labelledby="groupsTitle">
             <div class="view-header">
               <div>
                 <p class="eyebrow">Routing</p>
@@ -103,10 +119,10 @@
             <div id="groupsGrid" class="groups-grid"></div>
           </section>
 
-          <section id="presetsView" class="view" aria-labelledby="presetsTitle">
+          <section id="presetsView" class="view" role="tabpanel" aria-labelledby="presetsTitle">
             <div class="view-header">
               <div>
-                <p class="eyebrow">Local storage</p>
+                <p class="eyebrow">Lokaler Speicher</p>
                 <h1 id="presetsTitle">Setups & Presets</h1>
               </div>
               <button class="primary-inline" type="button" data-action="save-preset">Aktuelles Setup speichern</button>
@@ -114,10 +130,10 @@
             <div id="presetGrid" class="preset-grid"></div>
           </section>
 
-          <section id="diagnosticsView" class="view" aria-labelledby="diagnosticsTitle">
+          <section id="diagnosticsView" class="view" role="tabpanel" aria-labelledby="diagnosticsTitle">
             <div class="view-header">
               <div>
-                <p class="eyebrow">Raw BLE</p>
+                <p class="eyebrow">Bluetooth-Protokoll</p>
                 <h1 id="diagnosticsTitle">Diagnose</h1>
               </div>
               <button class="ghost-action" type="button" data-action="clear-log">Log leeren</button>
@@ -147,6 +163,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=20260624-eq-logo-2" defer></script>
+    <script src="app.js?v=20260801-monolyt-1" defer></script>
   </body>
 </html>

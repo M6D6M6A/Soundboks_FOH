@@ -1,6 +1,6 @@
 # Soundboks_FOH
 
-Soundboks_FOH ist eine lokale, mobile-first Web-App/PWA zur Steuerung von SOUNDBOKS 4 Lautsprechern ueber Web Bluetooth.
+Soundboks_FOH ist eine lokale, responsive Web-App/PWA zur Steuerung von SOUNDBOKS 4 Lautsprechern ueber Web Bluetooth.
 
 Ziel ist eine schnellere und praezisere FOH-taugliche Steuerung als in der offiziellen App: Raw-Volume, EQ, Stereo-Rollen, TeamUp-Modus, lokale Presets und spaeter Custom-Gruppen fuer mehrere Boxen.
 
@@ -21,9 +21,14 @@ Nicht im Web-MVP:
 
 Grund: Web Bluetooth ist laut aktuellem Supportstand in Safari/iOS und Firefox nicht verfuegbar. Chrome beschreibt Web Bluetooth als HTTPS-only API, die durch eine Nutzeraktion gestartet werden muss.
 
-## MVP
+## Live-Demo
 
-Version 1 soll zuerst eine SOUNDBOKS 4 stabil steuern:
+- App: <https://m6d6m6a.github.io/Soundboks_FOH/>
+- Demo mit zwei virtuellen SB4: <https://m6d6m6a.github.io/Soundboks_FOH/?demo=1>
+
+## Aktueller Funktionsumfang
+
+Die aktuelle Version bietet:
 
 - Browser-Support-Check fuer `navigator.bluetooth`
 - Device Scan ueber SOUNDBOKS Advertising Service UUID und/oder Manufacturer Data
@@ -37,17 +42,27 @@ Version 1 soll zuerst eine SOUNDBOKS 4 stabil steuern:
 - sechs Custom-EQ-Baender `-10..10`
 - Stereo Role `M`, `L`, `R`
 - lokale Presets in IndexedDB
+- Multi-Speaker Dashboard
+- gemeinsame Gruppenlautstaerke und Stereo-Routing fuer ein Speaker-Paar
+- Safety-Profile `Home 0-25`, `Chill 0-50`, `Party 0-255`
+- Diagnoseansicht fuer BLE Reads, Writes und Notifications
 - klare Zustaende fuer `idle`, `scanning`, `connecting`, `connected`, `disconnected`, `error`, `unsupported`
 
-## Phase 2
+## Bedienoberflaeche
 
-- Multi-Speaker Dashboard
-- Custom-Gruppen nur aktiv, wenn alle enthaltenen Speaker online sind
-- Gruppen-Volume ueber parallele Writes auf alle Gruppengeraete
-- Routing Buttons: `Mono beide`, `L/R`, `R/L`, `Left tauschen`
-- Setup Editor fuer Speaker States, Volume Limits, EQ und Routing
-- Safety Volume Modes: `Home 0-25`, `Chill 0-50`, `Party 0-255`
-- Diagnostics View fuer Raw BLE Reads, Writes und Notifications
+- Desktop: feste Session-Leiste und bis zu zwei Speaker nebeneinander
+- Tablet: kompakte dreispaltige Session-Uebersicht
+- Mobile: Bottom-Navigation, einspaltige Controls und Safe-Area-Unterstuetzung
+- Monochromes, rasterbasiertes UI mit der Markenfarbe `#d95007`
+- filigrane polygonale Potis und Slidergriffe nach dem eigenen Hexagon-Design
+- grosse Touch-Ziele, sichtbare Fokuszustaende und Reduced-Motion-Support
+
+## Naechste technische Schritte
+
+- reale Tests mit zwei SOUNDBOKS 4 und unterschiedlichen Firmware-Versionen
+- frei editierbare Gruppen statt des vorbereiteten Front-Pair-Workflows
+- detaillierter Setup Editor fuer Speaker-Zuordnung, EQ und Routing
+- Reconnect- und Fehlerfaelle mit realer Hardware weiter haerten
 
 ## Grundregeln
 
