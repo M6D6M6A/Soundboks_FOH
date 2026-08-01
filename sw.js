@@ -1,4 +1,4 @@
-const CACHE_NAME = "soundboks-foh-v7";
+const CACHE_NAME = "soundboks-foh-v8";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,7 +7,8 @@ const ASSETS = [
   "./manifest.webmanifest",
   "./assets/icon.svg",
   "./assets/control-poti.svg",
-  "./assets/control-slider-thumb.svg"
+  "./assets/control-slider-thumb.svg",
+  "./assets/control-slider-thumb-vertical.svg"
 ];
 
 self.addEventListener("install", (event) => {

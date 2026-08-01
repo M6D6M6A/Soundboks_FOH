@@ -215,7 +215,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260801-monolyt-1").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260802-fader-1").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }

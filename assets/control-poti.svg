@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 140" aria-hidden="true">
   <path
-    d="M19 47 38 21 53 48 68 7 93 45 109 21 141 42v47l-17 29-42 14-41-13-23-27z"
+    d="M18 48 38 22 53 48 68 7 93 46 109 22 142 43v46l-18 29-42 14-42-13-22-27z"
     fill="none"
     stroke="#d95007"
-    stroke-width="1.6"
+    stroke-width="2"
     stroke-linecap="square"
     stroke-linejoin="miter"
     vector-effect="non-scaling-stroke"

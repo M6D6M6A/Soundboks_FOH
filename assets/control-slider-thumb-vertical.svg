@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 48" aria-hidden="true">
   <polygon
-    points="8,1 40,1 47,6 47,18 40,23 8,23 1,18 1,6"
+    points="6,1 18,1 23,8 23,40 18,47 6,47 1,40 1,8"
     fill="none"
     stroke="#d95007"
     stroke-width="1.75"
