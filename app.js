@@ -28,8 +28,9 @@
     custom: "Custom"
   };
   const EQ_BANDS = ["63 Hz", "160 Hz", "400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz"];
-  const ROLE_VALUES = ["M", "L", "R"];
+  const ROLE_VALUES = ["L", "M", "R"];
   const TEAMUP_VALUES = ["solo", "host", "join"];
+  const TEAMUP_LABELS = { solo: "Solo", host: "Host", join: "Join" };
   const DEFAULT_EQ = { preset: "dancefloor", bands: [0, 0, 0, 0, 0, 0] };
   const DEFAULT_GROUPS = [
     {
@@ -50,7 +51,8 @@
     presets: [],
     diagnostics: [],
     clients: new Map(),
-    writeTimers: new Map()
+    writeTimers: new Map(),
+    expandedSpeakers: new Set()
   };
 
   const $ = (selector) => document.querySelector(selector);
@@ -214,7 +216,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260802-level-controls-1").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260803-accordion-1").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -275,9 +277,6 @@
       try {
         if (target.dataset.control === "volume") {
           await setVolume(speakerId, Number(target.value));
-        }
-        if (target.dataset.control === "teamup") {
-          await setTeamUpMode(speakerId, target.value);
         }
         if (target.dataset.control === "band") {
           await setEqBand(speakerId, Number(target.dataset.band), Number(target.value));
@@ -398,12 +397,40 @@
     if (action === "group-volume") return adjustGroupVolume(dataset.groupId, Number(dataset.delta));
 
     if (!speakerId) return;
+    if (action === "toggle-speaker-settings") return toggleSpeakerSettings(speakerId);
     if (action === "disconnect") return disconnectSpeaker(speakerId);
     if (action === "read-state") return readSpeakerState(speakerId);
     if (action === "volume-step") return adjustVolume(speakerId, Number(dataset.delta));
     if (action === "volume-set") return setVolume(speakerId, Number(dataset.value));
     if (action === "role") return setStereoRole(speakerId, dataset.role);
+    if (action === "teamup") return setTeamUpMode(speakerId, dataset.mode);
     if (action === "eq-preset") return setEqPreset(speakerId, dataset.preset);
+  }
+
+  function toggleSpeakerSettings(speakerId) {
+    const expanded = !state.expandedSpeakers.has(speakerId);
+    if (expanded) {
+      state.expandedSpeakers.add(speakerId);
+    } else {
+      state.expandedSpeakers.delete(speakerId);
+    }
+
+    const card = document.querySelector(`[data-card-speaker="${cssEscape(speakerId)}"]`);
+    const toggle = card?.querySelector('[data-action="toggle-speaker-settings"]');
+    const accordion = card?.querySelector(".speaker-accordion");
+    const glyph = toggle?.querySelector(".accordion-glyph");
+    if (!toggle || !accordion) {
+      renderSpeakers();
+      return;
+    }
+
+    card.classList.toggle("is-expanded", expanded);
+    accordion.hidden = !expanded;
+    accordion.setAttribute("aria-hidden", String(!expanded));
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.setAttribute("aria-label", expanded ? "Controls ausblenden" : "Controls einblenden");
+    toggle.title = expanded ? "Controls ausblenden" : "Controls einblenden";
+    if (glyph) glyph.textContent = expanded ? "V" : ">";
   }
 
   function loadDemoSetup() {
@@ -433,6 +460,7 @@
     };
     state.speakers = state.speakers.filter((speaker) => !speaker.demo);
     state.speakers.unshift(demoOne, demoTwo);
+    state.expandedSpeakers.clear();
     state.groups = [
       {
         id: "front-pair",
@@ -731,103 +759,114 @@
     const raw = Number(speaker.rawVolume || 0);
     const percent = Math.round((raw / 255) * 100);
     const level = levelNumberFromRaw(raw);
-    const levelMaskId = `level-mask-${cardIndex}`;
     const volumeFaderPosition = faderPosition(raw, 0, 255);
+    const expanded = state.expandedSpeakers.has(speaker.id);
+    const accordionId = `speaker-controls-${cardIndex}`;
+    const stereoRole = ROLE_VALUES.includes(speaker.stereoRole) ? speaker.stereoRole : "M";
+    const teamUpMode = TEAMUP_VALUES.includes(speaker.teamUpMode) ? speaker.teamUpMode : "solo";
+    const speakerTitle = `${speakerDisplayId(speaker)} | ${stereoRole} | ${TEAMUP_LABELS[teamUpMode]} | ${EQ_LABELS[eq.preset] || EQ_LABELS.custom}`;
 
     return `
-      <article class="speaker-card" data-card-speaker="${escapeAttr(speaker.id)}">
-        <div class="card-heading">
+      <article class="speaker-card ${expanded ? "is-expanded" : ""}" data-card-speaker="${escapeAttr(speaker.id)}">
+        <div class="card-heading speaker-panel speaker-card__title">
           <div class="speaker-title">
-            <h2>${escapeHtml(speaker.name || "SOUNDBOKS 4")}</h2>
-            <p>${escapeHtml(speaker.teamId || speaker.bluetoothDeviceId || speaker.id)}</p>
+            <h2>${escapeHtml(speakerTitle)}</h2>
           </div>
           <span class="status-pill ${statusClass}">${escapeHtml(speaker.connectionState)}</span>
         </div>
 
-        <div class="meter-wrap">
-          <div class="level-control-grid" role="group" aria-label="Volume controls">
-            ${stepButton(speaker.id, "min", 0, "set", disabled)}
-            <output class="raw-volume" data-raw-volume="${escapeAttr(speaker.id)}" aria-label="Raw volume ${raw} von 255">${raw}/255</output>
-            ${stepButton(speaker.id, "max", 255, "set", disabled)}
-            ${stepButton(speaker.id, "-1", -1, "step", disabled)}
-            <div class="volume-level">
-              <svg class="level-badge" viewBox="0 0 100 100" role="img" aria-label="Level ${level}">
-                <defs>
-                  <mask id="${levelMaskId}" x="0" y="0" width="100" height="100" maskUnits="userSpaceOnUse">
-                    <rect width="100" height="100" fill="#fff"></rect>
-                    <text class="level-badge-cutout" x="50" y="51" text-anchor="middle" dominant-baseline="middle" fill="#000"
-                      data-level-readout="${escapeAttr(speaker.id)}">${level}</text>
-                  </mask>
-                </defs>
-                <polygon points="29,1 71,1 99,29 99,71 71,99 29,99 1,71 1,29" fill="currentColor" mask="url(#${levelMaskId})"></polygon>
-              </svg>
+        <section class="speaker-settings speaker-panel">
+          <div class="meter-wrap">
+            <div class="fader-head">
+              <span class="section-label">Level</span>
+              <button class="settings-toggle" type="button"
+                data-action="toggle-speaker-settings" data-speaker-id="${escapeAttr(speaker.id)}"
+                aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
+                aria-label="${expanded ? "Controls ausblenden" : "Controls einblenden"}"
+                title="${expanded ? "Controls ausblenden" : "Controls einblenden"}">
+                <span class="accordion-glyph" aria-hidden="true">${expanded ? "V" : "&gt;"}</span>
+              </button>
             </div>
-            ${stepButton(speaker.id, "+1", 1, "step", disabled)}
-            ${stepButton(speaker.id, "-10", -10, "step", disabled)}
-            ${stepButton(speaker.id, "mid", 128, "set", disabled)}
-            ${stepButton(speaker.id, "+10", 10, "step", disabled)}
+            <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
+              style="--fader-position: ${volumeFaderPosition}"
+              aria-label="Raw Volume ${escapeAttr(speaker.name || speaker.id)}"
+              data-control="volume" data-speaker-id="${escapeAttr(speaker.id)}">
+            <p class="meter-caption"><span data-volume-percent="${escapeAttr(speaker.id)}">${percent}% Rohpegel</span><span>Limit: ${escapeHtml(state.activeLimit)}</span></p>
           </div>
-          <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
-            style="--fader-position: ${volumeFaderPosition}"
-            aria-label="Raw Volume ${escapeAttr(speaker.name || speaker.id)}"
-            data-control="volume" data-speaker-id="${escapeAttr(speaker.id)}">
-          <p class="meter-caption"><span data-volume-percent="${escapeAttr(speaker.id)}">${percent}% Rohpegel</span><span>Limit: ${escapeHtml(state.activeLimit)}</span></p>
-        </div>
 
-        <div class="control-section">
-          <span class="section-label">Stereo Role</span>
-          <div class="segmented" aria-label="Stereo Role">
-            ${ROLE_VALUES.map((role) => `
-              <button class="role-button ${speaker.stereoRole === role ? "is-active" : ""}" type="button" ${disabled}
-                data-action="role" data-role="${role}" data-speaker-id="${escapeAttr(speaker.id)}">${role}</button>
-            `).join("")}
-          </div>
-        </div>
+          <div id="${accordionId}" class="speaker-accordion" ${expanded ? "" : "hidden"} aria-hidden="${String(!expanded)}">
+            <div class="mode-control-layout">
+              <div class="mode-stack" role="group" aria-label="Stereo Role">
+                ${ROLE_VALUES.map((role) => `
+                  <button class="mode-button ${stereoRole === role ? "is-active" : ""}" type="button" ${disabled}
+                    data-action="role" data-role="${role}" data-speaker-id="${escapeAttr(speaker.id)}"
+                    aria-pressed="${String(stereoRole === role)}"><span>${role}</span></button>
+                `).join("")}
+              </div>
 
-        <div class="control-section">
-          <span class="section-label">TeamUp Mode</span>
-          <div class="inline-row">
-            <select ${disabled} data-control="teamup" data-speaker-id="${escapeAttr(speaker.id)}" aria-label="TeamUp Mode">
-              ${TEAMUP_VALUES.map((mode) => `<option value="${mode}" ${speaker.teamUpMode === mode ? "selected" : ""}>${mode}</option>`).join("")}
-            </select>
-          </div>
-        </div>
+              <div class="control-divider" aria-hidden="true"></div>
 
-        <div class="control-section eq-panel">
-          <div class="eq-header">
-            <span class="section-label">EQ</span>
-            <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
-          </div>
-          <div class="segmented eq" aria-label="EQ Presets">
-            ${EQ_PRESETS.map((preset) => `
-              <button class="preset-button ${eq.preset === preset ? "is-active" : ""}" type="button" ${disabled}
-                data-action="eq-preset" data-preset="${preset}" data-speaker-id="${escapeAttr(speaker.id)}">${EQ_LABELS[preset]}</button>
-            `).join("")}
-          </div>
-          <div class="eq-curve" aria-hidden="true">
-            ${eq.bands.map((value) => `<i style="height: ${44 + Number(value) * 3}px"></i>`).join("")}
-          </div>
-          <div class="band-grid">
-            ${eq.bands.map((value, index) => {
-              const numericValue = Number(value);
-              return `
-                <label class="band-control">
-                  <span class="band-value">${numericValue > 0 ? "+" : ""}${numericValue}</span>
-                  <input type="range" min="-10" max="10" value="${numericValue}" ${disabled}
-                    style="--fader-position: ${faderPosition(numericValue, -10, 10, true)}"
-                    data-control="band" data-band="${index}" data-speaker-id="${escapeAttr(speaker.id)}">
-                  <span class="band-label">${EQ_BANDS[index]}</span>
-                </label>
-              `;
-            }).join("")}
-          </div>
-        </div>
+              <div class="level-control-grid" role="group" aria-label="Volume controls">
+                ${stepButton(speaker.id, "min", 0, "set", disabled)}
+                <output class="raw-volume" data-raw-volume="${escapeAttr(speaker.id)}" aria-label="Raw volume ${raw} von 255">${raw} / 255</output>
+                ${stepButton(speaker.id, "max", 255, "set", disabled)}
+                ${stepButton(speaker.id, "-1", -1, "step", disabled)}
+                <output class="level-badge" data-level-readout="${escapeAttr(speaker.id)}" aria-label="Level ${level}">${level}</output>
+                ${stepButton(speaker.id, "+1", 1, "step", disabled)}
+                ${stepButton(speaker.id, "-10", -10, "step", disabled)}
+                ${stepButton(speaker.id, "mid", 128, "set", disabled)}
+                ${stepButton(speaker.id, "+10", 10, "step", disabled)}
+              </div>
 
-        <div class="header-actions">
-          <button class="ghost-action" type="button" data-action="read-state" data-speaker-id="${escapeAttr(speaker.id)}" ${disabled}>Status lesen</button>
-          <button class="ghost-action" type="button" data-action="disconnect" data-speaker-id="${escapeAttr(speaker.id)}">Trennen</button>
-        </div>
-        ${speaker.error ? `<div class="callout">${escapeHtml(speaker.error)}</div>` : ""}
+              <div class="control-divider" aria-hidden="true"></div>
+
+              <div class="mode-stack" role="group" aria-label="TeamUp Mode">
+                ${TEAMUP_VALUES.map((mode) => `
+                  <button class="mode-button mode-button--team ${teamUpMode === mode ? "is-active" : ""}" type="button" ${disabled}
+                    data-action="teamup" data-mode="${mode}" data-speaker-id="${escapeAttr(speaker.id)}"
+                    aria-pressed="${String(teamUpMode === mode)}"><span>${TEAMUP_LABELS[mode]}</span></button>
+                `).join("")}
+              </div>
+            </div>
+
+            <div class="control-section eq-panel">
+              <div class="eq-header">
+                <span class="section-label">EQ</span>
+                <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
+              </div>
+              <div class="segmented eq" aria-label="EQ Presets">
+                ${EQ_PRESETS.map((preset) => `
+                  <button class="preset-button ${eq.preset === preset ? "is-active" : ""}" type="button" ${disabled}
+                    data-action="eq-preset" data-preset="${preset}" data-speaker-id="${escapeAttr(speaker.id)}">${EQ_LABELS[preset]}</button>
+                `).join("")}
+              </div>
+              <div class="eq-curve" aria-hidden="true">
+                ${eq.bands.map((value) => `<i style="height: ${44 + Number(value) * 3}px"></i>`).join("")}
+              </div>
+              <div class="band-grid">
+                ${eq.bands.map((value, index) => {
+                  const numericValue = Number(value);
+                  return `
+                    <label class="band-control">
+                      <span class="band-value">${numericValue > 0 ? "+" : ""}${numericValue}</span>
+                      <input type="range" min="-10" max="10" value="${numericValue}" ${disabled}
+                        style="--fader-position: ${faderPosition(numericValue, -10, 10, true)}"
+                        aria-label="${EQ_BANDS[index]} ${numericValue}"
+                        data-control="band" data-band="${index}" data-speaker-id="${escapeAttr(speaker.id)}">
+                      <span class="band-label">${EQ_BANDS[index]}</span>
+                    </label>
+                  `;
+                }).join("")}
+              </div>
+            </div>
+
+            <div class="header-actions speaker-actions">
+              <button class="ghost-action" type="button" data-action="read-state" data-speaker-id="${escapeAttr(speaker.id)}" ${disabled}>Status lesen</button>
+              <button class="ghost-action" type="button" data-action="disconnect" data-speaker-id="${escapeAttr(speaker.id)}">Trennen</button>
+            </div>
+            ${speaker.error ? `<div class="callout">${escapeHtml(speaker.error)}</div>` : ""}
+          </div>
+        </section>
       </article>
     `;
   }
@@ -945,7 +984,7 @@
       level.closest(".level-badge")?.setAttribute("aria-label", `Level ${levelNumber}`);
     }
     if (raw) {
-      raw.textContent = `${rawVolume}/255`;
+      raw.textContent = `${rawVolume} / 255`;
       raw.setAttribute("aria-label", `Raw volume ${rawVolume} von 255`);
     }
     if (percent) percent.textContent = `${Math.round((rawVolume / 255) * 100)}% Rohpegel`;
@@ -1082,6 +1121,10 @@
   function extractTeamId(name) {
     const match = String(name || "").match(/#\d+/);
     return match ? match[0] : "";
+  }
+
+  function speakerDisplayId(speaker) {
+    return speaker.teamId || extractTeamId(speaker.name) || speaker.bluetoothDeviceId || speaker.id || "SOUNDBOKS 4";
   }
 
   function createId(prefix) {

@@ -54,7 +54,8 @@ Die aktuelle Version bietet:
 - Tablet: kompakte dreispaltige Session-Uebersicht
 - Mobile: Bottom-Navigation, einspaltige Controls und Safe-Area-Unterstuetzung
 - Monochromes, rasterbasiertes UI mit der Markenfarbe `#d95007`
-- konturierte Oktagon-Fader mit transparenter Schienenluecke und radialem Level-Bedienfeld
+- Fader-first-Geraetekarten mit getrennten Chamfer-Panels und standardmaessig geschlossenem Control-Accordion
+- konturierte Oktagon-Fader mit transparenter Schienenluecke, radialem Level-Bedienfeld sowie Stereo- und TeamUp-Oktagonen
 - grosse Touch-Ziele, sichtbare Fokuszustaende und Reduced-Motion-Support
 
 ## Naechste technische Schritte
