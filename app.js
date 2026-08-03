@@ -32,6 +32,9 @@
   const ROLE_VALUES = ["L", "M", "R"];
   const TEAMUP_VALUES = ["solo", "host", "join"];
   const TEAMUP_LABELS = { solo: "Solo", host: "Host", join: "Join" };
+  const VIEW_IDS = ["dashboard", "groups", "customEqs", "diagnostics"];
+  const CUSTOM_EQ_COOKIE = "soundboks_foh_custom_eqs_v1";
+  const MAX_LOCAL_CUSTOM_EQS = 10;
   const DEFAULT_EQ = { preset: "dancefloor", bands: [0, 0, 0, 0, 0, 0] };
   const DEFAULT_GROUPS = [
     {
@@ -49,7 +52,7 @@
     activeLimit: "Party",
     speakers: [],
     groups: structuredCloneSafe(DEFAULT_GROUPS),
-    presets: [],
+    customEqs: [],
     diagnostics: [],
     clients: new Map(),
     writeTimers: new Map(),
@@ -202,12 +205,12 @@
 
   async function init() {
     state.support = detectSupport();
-    const requestedView = location.hash.slice(1);
-    if (["dashboard", "groups", "presets", "diagnostics"].includes(requestedView)) {
+    const requestedView = location.hash.slice(1) === "presets" ? "customEqs" : location.hash.slice(1);
+    if (VIEW_IDS.includes(requestedView)) {
       state.view = requestedView;
     }
     bindEvents();
-    await loadPresets();
+    loadCustomEqs();
     render();
     if (new URLSearchParams(location.search).get("demo") === "1") {
       loadDemoSetup();
@@ -217,7 +220,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260803-quick-actions-3").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260803-vertical-eq-library-4").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -297,7 +300,7 @@
         const speaker = getSpeaker(speakerId);
         if (!speaker) return;
         speaker.rawVolume = rawVolume;
-        target.style.setProperty("--fader-position", faderPosition(rawVolume, 0, 255));
+        target.style.setProperty("--fader-position", faderPosition(rawVolume, 0, 255, true));
         updateVolumeDom(speakerId, rawVolume);
         scheduleWrite(`volume:${speakerId}`, () => setVolume(speakerId, rawVolume), 160);
       }
@@ -391,13 +394,13 @@
     if (action === "sync-all") return syncAll();
     if (action === "disconnect-all") return disconnectAll();
     if (action === "clear-log") return clearLog();
-    if (action === "save-preset") return saveCurrentPreset();
-    if (action === "delete-preset") return deletePreset(dataset.presetId);
-    if (action === "apply-preset") return applyPreset(dataset.presetId);
+    if (action === "delete-custom-eq") return deleteCustomEq(dataset.customEqId);
+    if (action === "apply-custom-eq") return applyCustomEq(dataset.customEqId);
     if (action === "group-route") return applyGroupRoute(dataset.groupId, dataset.route);
     if (action === "group-volume") return adjustGroupVolume(dataset.groupId, Number(dataset.delta));
 
     if (!speakerId) return;
+    if (action === "save-custom-eq") return saveCurrentCustomEq(speakerId);
     if (action === "toggle-custom-eq") return toggleCustomEq(speakerId);
     if (action === "disconnect") return disconnectSpeaker(speakerId);
     if (action === "read-state") return readSpeakerState(speakerId);
@@ -614,59 +617,56 @@
     await Promise.all(group.speakerIds.map((speakerId) => adjustVolume(speakerId, delta)));
   }
 
-  async function saveCurrentPreset() {
-    if (!state.speakers.length) return;
-    const name = window.prompt("Preset-Name", `Setup ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`);
+  function saveCurrentCustomEq(speakerId) {
+    const speaker = getSpeaker(speakerId);
+    if (!speaker?.eq) return;
+    const suggestedName = `${speakerDisplayId(speaker)} EQ`;
+    const requestedName = window.prompt("Custom-EQ-Name", suggestedName);
+    const name = String(requestedName || "").trim().slice(0, 60);
     if (!name) return;
+
     const now = Date.now();
-    const preset = {
-      id: createId("preset"),
+    const customEq = {
+      schemaVersion: 1,
+      id: createId("custom-eq"),
       name,
-      speakerStates: Object.fromEntries(state.speakers.map((speaker) => [
-        speaker.id,
-        {
-          name: speaker.name,
-          teamId: speaker.teamId,
-          rawVolume: speaker.rawVolume,
-          teamUpMode: speaker.teamUpMode,
-          stereoRole: speaker.stereoRole,
-          eq: speaker.eq
-        }
-      ])),
-      groups: structuredCloneSafe(state.groups),
-      volumeLimit: getActiveLimit(),
+      deviceModel: "SOUNDBOKS 4",
+      sourceDevice: speakerDisplayId(speaker),
+      bands: normalizeCustomEqBands(speaker.eq.bands),
       createdAt: now,
       updatedAt: now
     };
-    await savePreset(preset);
-    state.presets = await getPresets();
-    logEvent("storage", "preset", `saved ${preset.name}`);
+
+    const next = [customEq, ...state.customEqs].slice(0, MAX_LOCAL_CUSTOM_EQS);
+    persistCustomEqs(next);
+    state.customEqs = next;
+    logEvent("storage", "custom-eq", `saved ${customEq.name}`);
     render();
   }
 
-  async function applyPreset(presetId) {
-    const preset = state.presets.find((item) => item.id === presetId);
-    if (!preset) return;
-    if (preset.volumeLimit?.name) state.activeLimit = preset.volumeLimit.name;
+  async function applyCustomEq(customEqId) {
+    const customEq = state.customEqs.find((item) => item.id === customEqId);
+    if (!customEq) return;
+    const card = document.querySelector(`[data-custom-eq-id="${cssEscape(customEqId)}"]`);
+    const targetValue = card?.querySelector("[data-custom-eq-target]")?.value || "all";
+    const targets = targetValue === "all"
+      ? state.speakers.filter(isOnline)
+      : state.speakers.filter((speaker) => speaker.id === targetValue && isOnline(speaker));
+    if (!targets.length) throw new Error("Kein verbundener Speaker fuer dieses Custom EQ ausgewaehlt.");
 
-    for (const speaker of state.speakers) {
-      const desired = preset.speakerStates[speaker.id];
-      if (!desired) continue;
-      if (typeof desired.rawVolume === "number") await setVolume(speaker.id, desired.rawVolume);
-      if (desired.teamUpMode) await setTeamUpMode(speaker.id, desired.teamUpMode);
-      if (desired.stereoRole) await setStereoRole(speaker.id, desired.stereoRole);
-      if (desired.eq) {
-        speaker.eq = structuredCloneSafe(desired.eq);
-        await writeEq(speaker.id, speaker.eq);
-      }
+    for (const speaker of targets) {
+      speaker.eq = { preset: "custom", bands: [...customEq.bands] };
+      await writeEq(speaker.id, speaker.eq);
     }
-    logEvent("storage", "preset", `applied ${preset.name}`);
+    logEvent("storage", "custom-eq", `applied ${customEq.name} to ${targets.length} speaker`);
     render();
   }
 
-  async function deletePreset(presetId) {
-    await removePreset(presetId);
-    state.presets = await getPresets();
+  function deleteCustomEq(customEqId) {
+    const next = state.customEqs.filter((item) => item.id !== customEqId);
+    persistCustomEqs(next);
+    state.customEqs = next;
+    logEvent("storage", "custom-eq", `deleted ${customEqId}`);
     render();
   }
 
@@ -677,7 +677,7 @@
     renderStats();
     renderSpeakers();
     renderGroups();
-    renderPresets();
+    renderCustomEqs();
     renderDiagnostics();
   }
 
@@ -735,7 +735,7 @@
     const online = state.speakers.filter(isOnline).length;
     $("#deviceCount").textContent = String(state.speakers.length);
     $("#onlineCount").textContent = String(online);
-    $("#presetCount").textContent = String(state.presets.length);
+    $("#customEqCount").textContent = String(state.customEqs.length);
     $("#sessionState").textContent = online ? "connected" : "idle";
     $("#sessionState").className = `status-pill ${online ? "ok" : ""}`;
   }
@@ -758,7 +758,7 @@
     const raw = Number(speaker.rawVolume || 0);
     const volumeSummary = formatVolumeSummary(raw);
     const level = levelNumberFromRaw(raw);
-    const volumeFaderPosition = faderPosition(raw, 0, 255);
+    const volumeFaderPosition = faderPosition(raw, 0, 255, true);
     const expanded = state.expandedCustomEq.has(speaker.id);
     const accordionId = `custom-eq-${cardIndex}`;
     const stereoRole = ROLE_VALUES.includes(speaker.stereoRole) ? speaker.stereoRole : "M";
@@ -775,83 +775,89 @@
         </div>
 
         <section class="speaker-settings speaker-panel">
-          <div class="meter-wrap">
-            <div class="fader-head">
-              <span class="section-label">Level</span>
+          <div class="speaker-control-deck">
+            <div class="meter-wrap">
+              <div class="fader-head">
+                <span class="section-label">Level</span>
+              </div>
+              <div class="vertical-fader-slot">
+                <input class="range range--vertical" type="range" min="0" max="255" value="${raw}" ${disabled}
+                  style="--fader-position: ${volumeFaderPosition}"
+                  aria-label="Raw Volume ${escapeAttr(speaker.name || speaker.id)}"
+                  data-control="volume" data-speaker-id="${escapeAttr(speaker.id)}">
+              </div>
+              <p class="meter-caption">
+                <span data-volume-summary="${escapeAttr(speaker.id)}">${volumeSummary}</span>
+                <output class="meter-raw" data-raw-volume="${escapeAttr(speaker.id)}" aria-label="Raw volume ${raw} von 255">${raw} / 255</output>
+                <span>Limit: ${escapeHtml(state.activeLimit)}</span>
+              </p>
             </div>
-            <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
-              style="--fader-position: ${volumeFaderPosition}"
-              aria-label="Raw Volume ${escapeAttr(speaker.name || speaker.id)}"
-              data-control="volume" data-speaker-id="${escapeAttr(speaker.id)}">
-            <p class="meter-caption">
-              <span data-volume-summary="${escapeAttr(speaker.id)}">${volumeSummary}</span>
-              <output class="meter-raw" data-raw-volume="${escapeAttr(speaker.id)}" aria-label="Raw volume ${raw} von 255">${raw} / 255</output>
-              <span>Limit: ${escapeHtml(state.activeLimit)}</span>
-            </p>
-          </div>
 
-          <div class="quick-actions-shell">
-            <div class="mode-control-layout">
-              <div class="mode-stack quick-stack quick-stack--eq" role="group" aria-label="Quick EQ Presets">
-                ${QUICK_EQ_PRESETS.map((preset) => `
-                  <button class="mode-button quick-action-button ${eq.preset === preset ? "is-active" : ""}" type="button" ${disabled}
-                    data-action="eq-preset" data-preset="${preset}" data-speaker-id="${escapeAttr(speaker.id)}"
-                    aria-pressed="${String(eq.preset === preset)}"><span>${preset === "dancefloor" ? "Dance<wbr>floor" : EQ_LABELS[preset]}</span></button>
-                `).join("")}
-              </div>
+            <div class="control-divider deck-divider" aria-hidden="true"></div>
 
-              <div class="control-divider control-divider--outer-left" aria-hidden="true"></div>
+            <div class="quick-actions-shell">
+              <div class="mode-control-layout">
+                <div class="mode-stack quick-stack quick-stack--system" role="group" aria-label="System and Custom actions">
+                  <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
+                    aria-label="Power off" title="Power-off BLE command not mapped">
+                    <span class="power-icon" aria-hidden="true"></span>
+                  </button>
+                  <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
+                    aria-label="SKAA Pro" title="SKAA Pro BLE command not mapped"><span>SKAA<br>Pro</span></button>
+                  <button class="mode-button quick-action-button ${eq.preset === "custom" ? "is-active" : ""}" type="button" ${disabled}
+                    data-action="eq-preset" data-preset="custom" data-speaker-id="${escapeAttr(speaker.id)}"
+                    aria-pressed="${String(eq.preset === "custom")}"><span>Custom<br>EQ</span></button>
+                </div>
 
-              <div class="mode-stack mode-stack--role" role="group" aria-label="Stereo Role">
-                ${ROLE_VALUES.map((role) => `
-                  <button class="mode-button ${stereoRole === role ? "is-active" : ""}" type="button" ${disabled}
-                    data-action="role" data-role="${role}" data-speaker-id="${escapeAttr(speaker.id)}"
-                    aria-pressed="${String(stereoRole === role)}"><span>${role}</span></button>
-                `).join("")}
-              </div>
+                <div class="control-divider" aria-hidden="true"></div>
 
-              <div class="control-divider control-divider--inner-left" aria-hidden="true"></div>
+                <div class="mode-stack quick-stack quick-stack--eq" role="group" aria-label="Quick EQ Presets">
+                  ${QUICK_EQ_PRESETS.map((preset) => `
+                    <button class="mode-button quick-action-button ${eq.preset === preset ? "is-active" : ""}" type="button" ${disabled}
+                      data-action="eq-preset" data-preset="${preset}" data-speaker-id="${escapeAttr(speaker.id)}"
+                      aria-pressed="${String(eq.preset === preset)}"><span>${preset === "dancefloor" ? "Dance<wbr>floor" : EQ_LABELS[preset]}</span></button>
+                  `).join("")}
+                </div>
 
-              <div class="level-control-grid" role="group" aria-label="Volume controls">
-                ${stepButton(speaker.id, "min", 0, "set", disabled)}
-                ${stepButton(speaker.id, "mid", 128, "set", disabled)}
-                ${stepButton(speaker.id, "max", 255, "set", disabled)}
-                ${stepButton(speaker.id, "-1", -1, "step", disabled)}
-                <output class="level-badge" data-level-readout="${escapeAttr(speaker.id)}" aria-label="Level ${level}">${level}</output>
-                ${stepButton(speaker.id, "+1", 1, "step", disabled)}
-                ${stepButton(speaker.id, "-10", -10, "step", disabled)}
-                <button class="settings-toggle" type="button"
-                  data-action="toggle-custom-eq" data-speaker-id="${escapeAttr(speaker.id)}"
-                  aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
-                  aria-label="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"
-                  title="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}">
-                  <span class="accordion-glyph" aria-hidden="true"></span>
-                </button>
-                ${stepButton(speaker.id, "+10", 10, "step", disabled)}
-              </div>
+                <div class="control-divider" aria-hidden="true"></div>
 
-              <div class="control-divider control-divider--inner-right" aria-hidden="true"></div>
+                <div class="level-control-grid" role="group" aria-label="Volume controls">
+                  ${stepButton(speaker.id, "min", 0, "set", disabled)}
+                  ${stepButton(speaker.id, "mid", 128, "set", disabled)}
+                  ${stepButton(speaker.id, "max", 255, "set", disabled)}
+                  ${stepButton(speaker.id, "-1", -1, "step", disabled)}
+                  <output class="level-badge" data-level-readout="${escapeAttr(speaker.id)}" aria-label="Level ${level}">${level}</output>
+                  ${stepButton(speaker.id, "+1", 1, "step", disabled)}
+                  ${stepButton(speaker.id, "-10", -10, "step", disabled)}
+                  <button class="settings-toggle" type="button"
+                    data-action="toggle-custom-eq" data-speaker-id="${escapeAttr(speaker.id)}"
+                    aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
+                    aria-label="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"
+                    title="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}">
+                    <span class="accordion-glyph" aria-hidden="true"></span>
+                  </button>
+                  ${stepButton(speaker.id, "+10", 10, "step", disabled)}
+                </div>
 
-              <div class="mode-stack mode-stack--team" role="group" aria-label="TeamUp Mode">
-                ${TEAMUP_VALUES.map((mode) => `
-                  <button class="mode-button ${teamUpMode === mode ? "is-active" : ""}" type="button" ${disabled}
-                    data-action="teamup" data-mode="${mode}" data-speaker-id="${escapeAttr(speaker.id)}"
-                    aria-pressed="${String(teamUpMode === mode)}"><span>${TEAMUP_LABELS[mode]}</span></button>
-                `).join("")}
-              </div>
+                <div class="control-divider" aria-hidden="true"></div>
 
-              <div class="control-divider control-divider--outer-right" aria-hidden="true"></div>
+                <div class="mode-stack mode-stack--role" role="group" aria-label="Stereo Role">
+                  ${ROLE_VALUES.map((role) => `
+                    <button class="mode-button ${stereoRole === role ? "is-active" : ""}" type="button" ${disabled}
+                      data-action="role" data-role="${role}" data-speaker-id="${escapeAttr(speaker.id)}"
+                      aria-pressed="${String(stereoRole === role)}"><span>${role}</span></button>
+                  `).join("")}
+                </div>
 
-              <div class="mode-stack quick-stack quick-stack--system" role="group" aria-label="System and Custom actions">
-                <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
-                  aria-label="Power off" title="Power-off BLE command not mapped">
-                  <span class="power-icon" aria-hidden="true"></span>
-                </button>
-                <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
-                  aria-label="SKAA Pro" title="SKAA Pro BLE command not mapped"><span>SKAA<br>Pro</span></button>
-                <button class="mode-button quick-action-button ${eq.preset === "custom" ? "is-active" : ""}" type="button" ${disabled}
-                  data-action="eq-preset" data-preset="custom" data-speaker-id="${escapeAttr(speaker.id)}"
-                  aria-pressed="${String(eq.preset === "custom")}"><span>Custom<br>EQ</span></button>
+                <div class="control-divider" aria-hidden="true"></div>
+
+                <div class="mode-stack mode-stack--team" role="group" aria-label="TeamUp Mode">
+                  ${TEAMUP_VALUES.map((mode) => `
+                    <button class="mode-button ${teamUpMode === mode ? "is-active" : ""}" type="button" ${disabled}
+                      data-action="teamup" data-mode="${mode}" data-speaker-id="${escapeAttr(speaker.id)}"
+                      aria-pressed="${String(teamUpMode === mode)}"><span>${TEAMUP_LABELS[mode]}</span></button>
+                  `).join("")}
+                </div>
               </div>
             </div>
           </div>
@@ -860,7 +866,11 @@
             <div class="control-section eq-panel">
               <div class="eq-header">
                 <span class="section-label">Custom EQ</span>
-                <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
+                <div class="eq-header-tools">
+                  <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
+                  <button class="eq-save-action" type="button" data-action="save-custom-eq"
+                    data-speaker-id="${escapeAttr(speaker.id)}">Lokal speichern</button>
+                </div>
               </div>
               <div class="eq-curve" aria-hidden="true">
                 ${eq.bands.map((value) => `<i style="height: ${44 + Number(value) * 3}px"></i>`).join("")}
@@ -932,20 +942,50 @@
     `;
   }
 
-  function renderPresets() {
-    const grid = $("#presetGrid");
-    if (!state.presets.length) {
-      grid.innerHTML = renderEmptyMessage("Noch keine lokalen Presets gespeichert.");
+  function renderCustomEqs() {
+    const grid = $("#customEqGrid");
+    if (!state.customEqs.length) {
+      grid.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-visual" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+          <h2>Noch keine Custom EQs</h2>
+          <p>Der lokale Cookie-Speicher ist leer.</p>
+        </div>
+      `;
       return;
     }
-    grid.innerHTML = state.presets.map((preset) => `
-      <article class="preset-card">
-        <h2>${escapeHtml(preset.name)}</h2>
-        <p class="muted">${new Date(preset.updatedAt).toLocaleString("de-DE")} / ${Object.keys(preset.speakerStates).length} Speaker</p>
-        <p>Limit: <strong>${escapeHtml(preset.volumeLimit?.name || "Custom")}</strong></p>
-        <div class="preset-actions">
-          <button class="primary-inline" type="button" data-action="apply-preset" data-preset-id="${escapeAttr(preset.id)}">Anwenden</button>
-          <button class="ghost-action" type="button" data-action="delete-preset" data-preset-id="${escapeAttr(preset.id)}">Loeschen</button>
+
+    const onlineSpeakers = state.speakers.filter(isOnline);
+    const targetOptions = [
+      '<option value="all">Alle verbundenen Speaker</option>',
+      ...onlineSpeakers.map((speaker) => `<option value="${escapeAttr(speaker.id)}">${escapeHtml(speakerDisplayId(speaker))}</option>`)
+    ].join("");
+
+    grid.innerHTML = state.customEqs.map((customEq) => `
+      <article class="custom-eq-card" data-custom-eq-id="${escapeAttr(customEq.id)}">
+        <div class="custom-eq-card__head">
+          <h2>${escapeHtml(customEq.name)}</h2>
+          <span class="status-pill ok">Lokal</span>
+        </div>
+        <p class="muted">${new Date(customEq.updatedAt).toLocaleString("de-DE")} / ${escapeHtml(customEq.sourceDevice || customEq.deviceModel)}</p>
+        <div class="custom-eq-preview" aria-label="EQ values ${customEq.bands.join(", ")}">
+          ${customEq.bands.map((value, index) => `
+            <div class="custom-eq-preview__band">
+              <span class="band-value">${value > 0 ? "+" : ""}${value}</span>
+              <i style="height: ${24 + value * 2}px" aria-hidden="true"></i>
+              <span class="band-label">${EQ_BANDS[index]}</span>
+            </div>
+          `).join("")}
+        </div>
+        <label class="custom-eq-target">
+          <span class="section-label">Ziel</span>
+          <select data-custom-eq-target ${onlineSpeakers.length ? "" : "disabled"}>${targetOptions}</select>
+        </label>
+        <div class="custom-eq-actions">
+          <button class="primary-inline" type="button" data-action="apply-custom-eq"
+            data-custom-eq-id="${escapeAttr(customEq.id)}" ${onlineSpeakers.length ? "" : "disabled"}>Anwenden</button>
+          <button class="ghost-action" type="button" data-action="delete-custom-eq"
+            data-custom-eq-id="${escapeAttr(customEq.id)}">Loeschen</button>
         </div>
       </article>
     `).join("");
@@ -968,7 +1008,7 @@
   }
 
   function setView(view) {
-    if (!["dashboard", "groups", "presets", "diagnostics"].includes(view)) return;
+    if (!VIEW_IDS.includes(view)) return;
     state.view = view;
     render();
     history.replaceState(null, "", `${location.pathname}${location.search}#${view}`);
@@ -1201,76 +1241,75 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  async function loadPresets() {
+  function loadCustomEqs() {
     try {
-      state.presets = await getPresets();
+      state.customEqs = readCustomEqCookie();
     } catch (error) {
       logEvent("warn", "storage", error.message);
-      state.presets = [];
+      state.customEqs = [];
     }
   }
 
-  function openDb() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open("soundboks-foh", 1);
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains("presets")) {
-          db.createObjectStore("presets", { keyPath: "id" });
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+  function readCustomEqCookie() {
+    const prefix = `${CUSTOM_EQ_COOKIE}=`;
+    const entry = document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(prefix));
+    if (!entry) return [];
+    const parsed = JSON.parse(decodeURIComponent(entry.slice(prefix.length)));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(normalizeCustomEqRecord)
+      .filter(Boolean)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, MAX_LOCAL_CUSTOM_EQS);
   }
 
-  async function getPresets() {
-    if (!("indexedDB" in window)) return JSON.parse(localStorage.getItem("soundboks-foh-presets") || "[]");
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction("presets", "readonly");
-      const request = transaction.objectStore("presets").getAll();
-      request.onsuccess = () => resolve(request.result.sort((a, b) => b.updatedAt - a.updatedAt));
-      request.onerror = () => reject(request.error);
-      transaction.oncomplete = () => db.close();
-    });
-  }
-
-  async function savePreset(preset) {
-    if (!("indexedDB" in window)) {
-      const presets = JSON.parse(localStorage.getItem("soundboks-foh-presets") || "[]");
-      presets.unshift(preset);
-      localStorage.setItem("soundboks-foh-presets", JSON.stringify(presets));
-      return;
+  function persistCustomEqs(customEqs) {
+    const normalized = customEqs
+      .map(normalizeCustomEqRecord)
+      .filter(Boolean)
+      .slice(0, MAX_LOCAL_CUSTOM_EQS);
+    const encoded = encodeURIComponent(JSON.stringify(normalized));
+    if (`${CUSTOM_EQ_COOKIE}=${encoded}`.length > 3800) {
+      throw new Error("Der lokale Custom-EQ-Cookie ist voll. Loesche zuerst ein Preset.");
     }
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction("presets", "readwrite");
-      transaction.objectStore("presets").put(preset);
-      transaction.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      transaction.onerror = () => reject(transaction.error);
+
+    const secure = location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${CUSTOM_EQ_COOKIE}=${encoded}; Max-Age=31536000; Path=${customEqCookiePath()}; SameSite=Lax${secure}`;
+    const persisted = document.cookie.split(";").some((part) => part.trim().startsWith(`${CUSTOM_EQ_COOKIE}=`));
+    if (!persisted) throw new Error("Cookies sind blockiert; das Custom EQ konnte nicht gespeichert werden.");
+  }
+
+  function normalizeCustomEqRecord(value) {
+    if (!value || typeof value !== "object") return null;
+    const id = String(value.id || "").slice(0, 100);
+    const name = String(value.name || "").trim().slice(0, 60);
+    if (!id || !name || !Array.isArray(value.bands) || value.bands.length !== EQ_BANDS.length) return null;
+    const createdAt = Number(value.createdAt);
+    const updatedAt = Number(value.updatedAt);
+    return {
+      schemaVersion: 1,
+      id,
+      name,
+      deviceModel: String(value.deviceModel || "SOUNDBOKS 4").slice(0, 40),
+      sourceDevice: String(value.sourceDevice || "SOUNDBOKS 4").slice(0, 60),
+      bands: normalizeCustomEqBands(value.bands),
+      createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now()
+    };
+  }
+
+  function normalizeCustomEqBands(values) {
+    return EQ_BANDS.map((_, index) => {
+      const value = Number(values?.[index]);
+      return Math.round(clamp(Number.isFinite(value) ? value : 0, -10, 10));
     });
   }
 
-  async function removePreset(presetId) {
-    if (!("indexedDB" in window)) {
-      const presets = JSON.parse(localStorage.getItem("soundboks-foh-presets") || "[]").filter((preset) => preset.id !== presetId);
-      localStorage.setItem("soundboks-foh-presets", JSON.stringify(presets));
-      return;
-    }
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction("presets", "readwrite");
-      transaction.objectStore("presets").delete(presetId);
-      transaction.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-      transaction.onerror = () => reject(transaction.error);
-    });
+  function customEqCookiePath() {
+    const path = location.pathname || "/";
+    if (path.endsWith("/")) return path;
+    const directoryEnd = path.lastIndexOf("/") + 1;
+    return path.slice(0, directoryEnd) || "/";
   }
 
   init().catch((error) => {

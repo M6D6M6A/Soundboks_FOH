@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://m6d6m6a.github.io/Soundboks_FOH/presets/schema.json",
+  "title": "Soundboks_FOH Custom EQ Preset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "deviceModel",
+    "bands"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 100
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 280
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "deviceModel": {
+      "const": "SOUNDBOKS 4"
+    },
+    "sourceDevice": {
+      "type": "string",
+      "maxLength": 60
+    },
+    "bands": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "integer",
+        "minimum": -10,
+        "maximum": 10
+      }
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 24
+      }
+    },
+    "license": {
+      "enum": ["CC0-1.0", "CC-BY-4.0"]
+    },
+    "createdAt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "updatedAt": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

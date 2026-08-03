@@ -2,7 +2,7 @@
 
 Soundboks_FOH ist eine lokale, responsive Web-App/PWA zur Steuerung von SOUNDBOKS 4 Lautsprechern ueber Web Bluetooth.
 
-Ziel ist eine schnellere und praezisere FOH-taugliche Steuerung als in der offiziellen App: Raw-Volume, EQ, Stereo-Rollen, TeamUp-Modus, lokale Presets und spaeter Custom-Gruppen fuer mehrere Boxen.
+Ziel ist eine schnellere und praezisere FOH-taugliche Steuerung als in der offiziellen App: Raw-Volume, EQ, Stereo-Rollen, TeamUp-Modus, lokale Custom-EQs und spaeter Custom-Gruppen fuer mehrere Boxen.
 
 ## Zielplattformen
 
@@ -41,7 +41,9 @@ Die aktuelle Version bietet:
 - EQ Presets: Dancefloor, Stage, Lounge, Custom
 - sechs Custom-EQ-Baender `-10..10`
 - Stereo Role `M`, `L`, `R`
-- lokale Presets in IndexedDB
+- bis zu zehn lokale Custom-EQ-Presets im geraetebezogenen Browser-Cookie
+- Zielauswahl zum Anwenden eines Custom EQs auf einen oder alle verbundenen Speaker
+- versioniertes Community-Preset-Format unter [`presets/`](presets/README.md)
 - Multi-Speaker Dashboard
 - gemeinsame Gruppenlautstaerke und Stereo-Routing fuer ein Speaker-Paar
 - Safety-Profile `Home 0-25`, `Chill 0-50`, `Party 0-255`
@@ -50,12 +52,13 @@ Die aktuelle Version bietet:
 
 ## Bedienoberflaeche
 
-- Desktop: feste Session-Leiste und bis zu zwei Speaker nebeneinander
+- Desktop: feste Session-Leiste und einspaltige Speaker-Decks
 - Tablet: kompakte dreispaltige Session-Uebersicht
 - Mobile: Bottom-Navigation, einspaltige Controls und Safe-Area-Unterstuetzung
 - Monochromes, rasterbasiertes UI mit der Markenfarbe `#d95007`
-- Fader-first-Geraetekarten mit dauerhaft sichtbarer Quick-Action-Matrix und separat klappbarem Custom-EQ-Editor
-- responsive Fuenf-Gruppen-Steuerung fuer EQ, Stereo-Rolle, Level, TeamUp und Systemaktionen
+- vertikaler Level-Fader links neben den dauerhaft sichtbaren Quick Actions
+- einheitliche vertikale Reihenfolge: System, EQ, Level, Stereo-Rolle und TeamUp
+- separat klappbarer Custom-EQ-Editor mit lokalem Speichern pro Speaker
 - konturierte Oktagon-Fader mit transparenter Schienenluecke, zentrierter Raw-Anzeige und einheitlich quadratischen 33-Prozent-Control-Oktagonen
 - grosse Touch-Ziele, sichtbare Fokuszustaende und Reduced-Motion-Support
 
@@ -63,7 +66,7 @@ Die aktuelle Version bietet:
 
 - reale Tests mit zwei SOUNDBOKS 4 und unterschiedlichen Firmware-Versionen
 - frei editierbare Gruppen statt des vorbereiteten Front-Pair-Workflows
-- detaillierter Setup Editor fuer Speaker-Zuordnung, EQ und Routing
+- Export-, Import- und Community-Review-Flow fuer Custom EQs
 - Reconnect- und Fehlerfaelle mit realer Hardware weiter haerten
 
 ## Grundregeln

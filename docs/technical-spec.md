@@ -182,7 +182,8 @@ Empfohlener Stack:
 - Vite
 - PWA Setup
 - Zustand fuer App-State
-- IndexedDB fuer Setups und Presets
+- Browser-Cookie fuer lokale Custom-EQ-Presets im MVP
+- versionierte Community-Presets als JSON unter `presets/community`
 - kein Backend im MVP
 
 Schichten:
@@ -209,16 +210,16 @@ src/
   domain/
     Speaker.ts
     Group.ts
-    Setup.ts
+    CustomEqPreset.ts
     Command.ts
   state/
     speakerStore.ts
-    setupStore.ts
+    customEqStore.ts
   ui/
     components/
     views/
   storage/
-    indexedDb.ts
+    customEqCookie.ts
   diagnostics/
 ```
 
@@ -269,12 +270,13 @@ interface SpeakerGroup {
 
 type RoutingPreset = "mono_both" | "left_right" | "right_left" | "swap_left";
 
-interface Setup {
+interface CustomEqPreset {
+  schemaVersion: 1;
   id: string;
   name: string;
-  speakerStates: Record<string, Partial<Speaker>>;
-  groups: SpeakerGroup[];
-  volumeLimit?: VolumeLimit;
+  deviceModel: "SOUNDBOKS 4";
+  sourceDevice?: string;
+  bands: [number, number, number, number, number, number];
   createdAt: number;
   updatedAt: number;
 }
@@ -296,7 +298,8 @@ interface VolumeLimit {
 - Stereo Role Read/Write funktioniert.
 - TeamUp Mode Read/Write funktioniert.
 - Notifications aktualisieren die UI.
-- Lokale Presets bleiben nach Reload erhalten.
+- Lokale Custom-EQ-Presets bleiben im Browser-Cookie nach Reload erhalten.
+- Custom-EQ-Presets enthalten keine Volume-, TeamUp-, Stereo- oder Gruppendaten.
 - Offene Protokollfelder werden nicht als bestaetigt gelabelt.
 
 ## Sources

@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema.json",
+  "schemaVersion": 1,
+  "id": "example-flat",
+  "name": "Flat Reference",
+  "description": "Neutral format example; not a tuned FOH recommendation.",
+  "author": "Soundboks_FOH",
+  "deviceModel": "SOUNDBOKS 4",
+  "bands": [0, 0, 0, 0, 0, 0],
+  "tags": ["example", "reference"],
+  "license": "CC0-1.0"
+}

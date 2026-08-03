@@ -11,8 +11,8 @@
     <meta name="description" content="Soundboks_FOH steuert SOUNDBOKS 4 Lautsprecher lokal ueber Web Bluetooth.">
     <title>Soundboks_FOH</title>
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-    <link rel="manifest" href="manifest.webmanifest?v=20260803-quick-actions-3">
-    <link rel="stylesheet" href="styles.css?v=20260803-quick-actions-3">
+    <link rel="manifest" href="manifest.webmanifest?v=20260803-vertical-eq-library-4">
+    <link rel="stylesheet" href="styles.css?v=20260803-vertical-eq-library-4">
   </head>
   <body>
     <noscript>
@@ -42,8 +42,8 @@
           <button class="tab" type="button" role="tab" tabindex="-1" data-view="groups" aria-controls="groupsView" aria-selected="false" title="Gruppen">
             <span class="tab-index" aria-hidden="true">02</span><span>Gruppen</span>
           </button>
-          <button class="tab" type="button" role="tab" tabindex="-1" data-view="presets" aria-controls="presetsView" aria-selected="false" title="Setups">
-            <span class="tab-index" aria-hidden="true">03</span><span>Setups</span>
+          <button class="tab" type="button" role="tab" tabindex="-1" data-view="customEqs" aria-controls="customEqsView" aria-selected="false" title="Custom EQs">
+            <span class="tab-index" aria-hidden="true">03</span><span>Custom EQs</span>
           </button>
           <button class="tab" type="button" role="tab" tabindex="-1" data-view="diagnostics" aria-controls="diagnosticsView" aria-selected="false" title="Diagnose">
             <span class="tab-index" aria-hidden="true">04</span><span>Diagnose</span>
@@ -89,7 +89,7 @@
             <dl class="mini-stats">
               <div><dt>Devices</dt><dd id="deviceCount">0</dd></div>
               <div><dt>Online</dt><dd id="onlineCount">0</dd></div>
-              <div><dt>Presets</dt><dd id="presetCount">0</dd></div>
+              <div><dt>EQs</dt><dd id="customEqCount">0</dd></div>
             </dl>
           </div>
         </section>
@@ -119,15 +119,14 @@
             <div id="groupsGrid" class="groups-grid"></div>
           </section>
 
-          <section id="presetsView" class="view" role="tabpanel" aria-labelledby="presetsTitle">
+          <section id="customEqsView" class="view" role="tabpanel" aria-labelledby="customEqsTitle">
             <div class="view-header">
               <div>
-                <p class="eyebrow">Lokaler Speicher</p>
-                <h1 id="presetsTitle">Setups & Presets</h1>
+                <p class="eyebrow">Lokale Bibliothek</p>
+                <h1 id="customEqsTitle">Custom EQs</h1>
               </div>
-              <button class="primary-inline" type="button" data-action="save-preset">Aktuelles Setup speichern</button>
             </div>
-            <div id="presetGrid" class="preset-grid"></div>
+            <div id="customEqGrid" class="custom-eq-grid"></div>
           </section>
 
           <section id="diagnosticsView" class="view" role="tabpanel" aria-labelledby="diagnosticsTitle">
@@ -163,6 +162,6 @@
       </div>
     </template>
 
-    <script src="app.js?v=20260803-quick-actions-3" defer></script>
+    <script src="app.js?v=20260803-vertical-eq-library-4" defer></script>
   </body>
 </html>
