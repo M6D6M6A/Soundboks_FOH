@@ -216,7 +216,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260803-accordion-1").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260803-square-controls-2").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -418,7 +418,6 @@
     const card = document.querySelector(`[data-card-speaker="${cssEscape(speakerId)}"]`);
     const toggle = card?.querySelector('[data-action="toggle-speaker-settings"]');
     const accordion = card?.querySelector(".speaker-accordion");
-    const glyph = toggle?.querySelector(".accordion-glyph");
     if (!toggle || !accordion) {
       renderSpeakers();
       return;
@@ -430,7 +429,6 @@
     toggle.setAttribute("aria-expanded", String(expanded));
     toggle.setAttribute("aria-label", expanded ? "Controls ausblenden" : "Controls einblenden");
     toggle.title = expanded ? "Controls ausblenden" : "Controls einblenden";
-    if (glyph) glyph.textContent = expanded ? "V" : ">";
   }
 
   function loadDemoSetup() {
@@ -757,7 +755,7 @@
     const disabled = online ? "" : "disabled";
     const statusClass = online ? "ok" : speaker.connectionState === "error" ? "error" : "warn";
     const raw = Number(speaker.rawVolume || 0);
-    const percent = Math.round((raw / 255) * 100);
+    const volumeSummary = formatVolumeSummary(raw);
     const level = levelNumberFromRaw(raw);
     const volumeFaderPosition = faderPosition(raw, 0, 255);
     const expanded = state.expandedSpeakers.has(speaker.id);
@@ -784,14 +782,18 @@
                 aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
                 aria-label="${expanded ? "Controls ausblenden" : "Controls einblenden"}"
                 title="${expanded ? "Controls ausblenden" : "Controls einblenden"}">
-                <span class="accordion-glyph" aria-hidden="true">${expanded ? "V" : "&gt;"}</span>
+                <span class="accordion-glyph" aria-hidden="true"></span>
               </button>
             </div>
             <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
               style="--fader-position: ${volumeFaderPosition}"
               aria-label="Raw Volume ${escapeAttr(speaker.name || speaker.id)}"
               data-control="volume" data-speaker-id="${escapeAttr(speaker.id)}">
-            <p class="meter-caption"><span data-volume-percent="${escapeAttr(speaker.id)}">${percent}% Rohpegel</span><span>Limit: ${escapeHtml(state.activeLimit)}</span></p>
+            <p class="meter-caption">
+              <span data-volume-summary="${escapeAttr(speaker.id)}">${volumeSummary}</span>
+              <output class="meter-raw" data-raw-volume="${escapeAttr(speaker.id)}" aria-label="Raw volume ${raw} von 255">${raw} / 255</output>
+              <span>Limit: ${escapeHtml(state.activeLimit)}</span>
+            </p>
           </div>
 
           <div id="${accordionId}" class="speaker-accordion" ${expanded ? "" : "hidden"} aria-hidden="${String(!expanded)}">
@@ -808,7 +810,7 @@
 
               <div class="level-control-grid" role="group" aria-label="Volume controls">
                 ${stepButton(speaker.id, "min", 0, "set", disabled)}
-                <output class="raw-volume" data-raw-volume="${escapeAttr(speaker.id)}" aria-label="Raw volume ${raw} von 255">${raw} / 255</output>
+                <span class="level-control-spacer" aria-hidden="true"></span>
                 ${stepButton(speaker.id, "max", 255, "set", disabled)}
                 ${stepButton(speaker.id, "-1", -1, "step", disabled)}
                 <output class="level-badge" data-level-readout="${escapeAttr(speaker.id)}" aria-label="Level ${level}">${level}</output>
@@ -977,7 +979,7 @@
   function updateVolumeDom(speakerId, rawVolume) {
     const level = document.querySelector(`[data-level-readout="${cssEscape(speakerId)}"]`);
     const raw = document.querySelector(`[data-raw-volume="${cssEscape(speakerId)}"]`);
-    const percent = document.querySelector(`[data-volume-percent="${cssEscape(speakerId)}"]`);
+    const summary = document.querySelector(`[data-volume-summary="${cssEscape(speakerId)}"]`);
     if (level) {
       const levelNumber = levelNumberFromRaw(rawVolume);
       level.textContent = String(levelNumber);
@@ -987,7 +989,7 @@
       raw.textContent = `${rawVolume} / 255`;
       raw.setAttribute("aria-label", `Raw volume ${rawVolume} von 255`);
     }
-    if (percent) percent.textContent = `${Math.round((rawVolume / 255) * 100)}% Rohpegel`;
+    if (summary) summary.textContent = formatVolumeSummary(rawVolume);
   }
 
   function scheduleWrite(key, fn, delay) {
@@ -1031,6 +1033,15 @@
 
   function getActiveLimit() {
     return LIMITS.find((limit) => limit.name === state.activeLimit) || LIMITS[LIMITS.length - 1];
+  }
+
+  function formatVolumeSummary(rawVolume) {
+    const raw = clamp(Number(rawVolume), 0, 255);
+    const rawPercent = Math.round((raw / 255) * 100);
+    const limit = getActiveLimit();
+    if (limit.maxRaw >= 255) return `${rawPercent}% RAW`;
+    const limitPercent = Math.round((raw / limit.maxRaw) * 100);
+    return `${limitPercent}% LIMIT (${rawPercent}% RAW)`;
   }
 
   function detectSupport() {

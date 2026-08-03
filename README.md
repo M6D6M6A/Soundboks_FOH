@@ -55,7 +55,7 @@ Die aktuelle Version bietet:
 - Mobile: Bottom-Navigation, einspaltige Controls und Safe-Area-Unterstuetzung
 - Monochromes, rasterbasiertes UI mit der Markenfarbe `#d95007`
 - Fader-first-Geraetekarten mit getrennten Chamfer-Panels und standardmaessig geschlossenem Control-Accordion
-- konturierte Oktagon-Fader mit transparenter Schienenluecke, radialem Level-Bedienfeld sowie Stereo- und TeamUp-Oktagonen
+- konturierte Oktagon-Fader mit transparenter Schienenluecke, zentrierter Raw-Anzeige und einheitlich quadratischen 33-Prozent-Control-Oktagonen
 - grosse Touch-Ziele, sichtbare Fokuszustaende und Reduced-Motion-Support
 
 ## Naechste technische Schritte

@@ -16,7 +16,7 @@
   --error: #ff9f96;
   --info: #9ecaff;
   --hexagon: polygon(25% 6.7%, 75% 6.7%, 100% 50%, 75% 93.3%, 25% 93.3%, 0 50%);
-  --octagon: polygon(29.3% 0, 70.7% 0, 100% 29.3%, 100% 70.7%, 70.7% 100%, 29.3% 100%, 0 70.7%, 0 29.3%);
+  --octagon: polygon(33.333% 0, 66.667% 0, 100% 33.333%, 100% 66.667%, 66.667% 100%, 33.333% 100%, 0 66.667%, 0 33.333%);
   --tap: 48px;
   --header-height: 64px;
   --rail-width: 300px;
@@ -608,7 +608,7 @@ h2 {
   display: grid;
   align-content: start;
   min-width: 0;
-  gap: 4px;
+  gap: 0;
 }
 
 .speaker-panel {
@@ -699,25 +699,29 @@ h2 {
 }
 
 .settings-toggle {
-  --toggle-fill: var(--surface-raised);
+  --control-border: var(--primary);
+  --control-fill: var(--bg);
+  --control-ink: var(--primary);
   position: relative;
   isolation: isolate;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
+  aspect-ratio: 1;
   min-height: 0;
   padding: 0;
-  background: var(--primary);
+  background: var(--control-border);
   clip-path: var(--octagon);
-  color: var(--primary);
+  color: var(--control-ink);
+  transition: filter 160ms ease;
 }
 
 .settings-toggle::before {
   position: absolute;
   inset: 1.5px;
   z-index: 0;
-  background: var(--toggle-fill);
+  background: var(--control-fill);
   clip-path: var(--octagon);
   content: "";
 }
@@ -725,18 +729,26 @@ h2 {
 .accordion-glyph {
   position: relative;
   z-index: 1;
-  font-size: 0.7rem;
-  font-weight: 800;
-  line-height: 1;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 220ms var(--ease);
 }
 
 .settings-toggle:hover {
-  --toggle-fill: var(--surface-strong);
+  filter: brightness(1.16);
 }
 
-.speaker-card.is-expanded .settings-toggle {
-  --toggle-fill: var(--primary);
-  color: var(--bg);
+.settings-toggle[aria-expanded="true"] {
+  --control-border: var(--bg);
+  --control-fill: var(--primary);
+  --control-ink: var(--bg);
+}
+
+.settings-toggle[aria-expanded="true"] .accordion-glyph {
+  transform: rotate(45deg);
 }
 
 .speaker-accordion {
@@ -756,14 +768,13 @@ h2 {
 }
 
 .mode-control-layout {
-  --level-size: 72px;
-  --step-size: 56px;
-  --mode-size: 56px;
+  --control-size: 72px;
+  --control-gap: 8px;
   display: grid;
-  grid-template-columns: var(--mode-size) 1px max-content 1px var(--mode-size);
+  grid-template-columns: var(--control-size) 1px max-content 1px var(--control-size);
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: var(--control-gap);
   min-width: 0;
   padding: 2px 0 20px;
   border-bottom: 1px solid var(--line);
@@ -771,32 +782,33 @@ h2 {
 
 .mode-stack {
   display: grid;
-  grid-template-rows: repeat(3, var(--mode-size));
-  gap: 8px;
+  grid-template-rows: repeat(3, var(--control-size));
+  gap: var(--control-gap);
 }
 
 .control-divider {
   align-self: stretch;
   width: 1px;
-  background: linear-gradient(to bottom, transparent, var(--primary) 14%, var(--primary) 86%, transparent);
-  opacity: 0.72;
+  background: var(--primary);
+  opacity: 0.48;
 }
 
 .level-control-grid {
   display: grid;
-  grid-template-columns: var(--step-size) var(--level-size) var(--step-size);
-  grid-template-rows: var(--step-size) var(--level-size) var(--step-size);
+  grid-template-columns: repeat(3, var(--control-size));
+  grid-template-rows: repeat(3, var(--control-size));
   align-items: center;
   justify-content: center;
   justify-items: center;
-  gap: 8px 12px;
+  gap: var(--control-gap);
 }
 
 .level-badge {
   display: grid;
   place-items: center;
-  width: var(--level-size);
-  height: var(--level-size);
+  width: var(--control-size);
+  height: var(--control-size);
+  aspect-ratio: 1;
   background: var(--primary);
   clip-path: var(--octagon);
   color: var(--bg);
@@ -806,29 +818,10 @@ h2 {
   line-height: 1;
 }
 
-.raw-volume {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  place-items: center;
-  width: var(--level-size);
-  height: var(--step-size);
-  background: var(--primary);
-  clip-path: var(--octagon);
-  color: var(--primary);
-  font-size: 0.6rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.raw-volume::before {
-  position: absolute;
-  inset: 1.5px;
-  z-index: -1;
-  background: var(--surface-raised);
-  clip-path: var(--octagon);
-  content: "";
+.level-control-spacer {
+  width: var(--control-size);
+  height: var(--control-size);
+  aspect-ratio: 1;
 }
 
 .range {
@@ -888,10 +881,33 @@ h2 {
 }
 
 .meter-caption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
   margin: 0;
   color: var(--muted);
   font-size: 0.64rem;
+  line-height: 1.35;
   text-transform: uppercase;
+}
+
+.meter-caption > :first-child {
+  justify-self: start;
+}
+
+.meter-caption > :last-child {
+  justify-self: end;
+  text-align: right;
+}
+
+.meter-raw {
+  justify-self: center;
+  color: var(--primary);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .preset-button {
@@ -902,36 +918,42 @@ h2 {
 }
 
 .step-button {
-  --control-fill: var(--surface-raised);
+  --control-border: var(--primary);
+  --control-fill: var(--bg);
+  --control-ink: var(--primary);
   position: relative;
   isolation: isolate;
   display: grid;
   place-items: center;
-  width: var(--step-size);
-  height: var(--step-size);
+  width: var(--control-size);
+  height: var(--control-size);
+  aspect-ratio: 1;
   min-height: 0;
   padding: 0;
   border: 0;
-  background: var(--primary);
+  background: var(--control-border);
   clip-path: var(--octagon);
-  color: var(--primary);
+  color: var(--control-ink);
   font-size: 0.62rem;
 }
 
 .mode-button {
-  --control-fill: var(--surface-raised);
+  --control-border: var(--primary);
+  --control-fill: var(--bg);
+  --control-ink: var(--primary);
   position: relative;
   isolation: isolate;
   display: grid;
   place-items: center;
-  width: var(--mode-size);
-  height: var(--mode-size);
+  width: var(--control-size);
+  height: var(--control-size);
+  aspect-ratio: 1;
   min-height: 0;
   padding: 0;
   border: 0;
-  background: var(--primary);
+  background: var(--control-border);
   clip-path: var(--octagon);
-  color: var(--primary);
+  color: var(--control-ink);
   font-size: 0.68rem;
 }
 
@@ -958,7 +980,7 @@ h2 {
 
 .step-button:hover,
 .mode-button:not(.is-active):hover {
-  --control-fill: var(--surface-strong);
+  filter: brightness(1.16);
 }
 
 .preset-button:hover {
@@ -967,8 +989,9 @@ h2 {
 }
 
 .mode-button.is-active {
+  --control-border: var(--bg);
   --control-fill: var(--primary);
-  color: var(--bg);
+  --control-ink: var(--bg);
 }
 
 .control-section {
@@ -1606,18 +1629,8 @@ h2 {
 
 @media (max-width: 600px) {
   .mode-control-layout {
-    --level-size: 64px;
-    --step-size: 48px;
-    --mode-size: 48px;
-    gap: 8px;
-  }
-
-  .level-control-grid {
-    gap: 7px 9px;
-  }
-
-  .mode-stack {
-    gap: 7px;
+    --control-size: 56px;
+    --control-gap: 6px;
   }
 
   .mode-button--team {
@@ -1632,25 +1645,18 @@ h2 {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .meter-caption {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-  }
-
   .mode-control-layout {
-    --level-size: 54px;
-    --step-size: 40px;
-    --mode-size: 40px;
-    gap: 5px;
+    --control-size: 44px;
+    --control-gap: 4px;
   }
 
-  .level-control-grid {
-    gap: 6px 5px;
+  .meter-caption {
+    gap: 4px;
+    font-size: 0.52rem;
   }
 
-  .mode-stack {
-    gap: 6px;
+  .meter-raw {
+    font-size: 0.58rem;
   }
 
   .step-button {
@@ -1659,10 +1665,6 @@ h2 {
 
   .mode-button--team {
     font-size: 0.43rem;
-  }
-
-  .raw-volume {
-    font-size: 0.52rem;
   }
 
   .level-badge {
