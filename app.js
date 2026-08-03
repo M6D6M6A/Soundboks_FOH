@@ -36,6 +36,19 @@
   const CUSTOM_EQ_COOKIE = "soundboks_foh_custom_eqs_v1";
   const UI_STATE_STORAGE = "soundboks_foh_ui_state_v1";
   const MAX_LOCAL_CUSTOM_EQS = 10;
+  const DEFAULT_PRESET_CATALOG_URL = "presets/defaults/catalog.json";
+  const FALLBACK_DEFAULT_EQS = [
+    {
+      schemaVersion: 1,
+      id: "default-flat",
+      name: "Default Flat",
+      deviceModel: "SOUNDBOKS 4",
+      sourceDevice: "Soundboks_FOH Repository",
+      bands: [0, 0, 0, 0, 0, 0],
+      createdAt: 0,
+      updatedAt: 0
+    }
+  ];
   const DEFAULT_EQ = { preset: "dancefloor", bands: [0, 0, 0, 0, 0, 0] };
   const DEFAULT_GROUPS = [
     {
@@ -53,6 +66,7 @@
     activeLimit: "Party",
     speakers: [],
     groups: structuredCloneSafe(DEFAULT_GROUPS),
+    defaultEqs: [],
     customEqs: [],
     diagnostics: [],
     clients: new Map(),
@@ -211,6 +225,7 @@
     state.support = detectSupport();
     bindEvents();
     loadCustomEqs();
+    await loadDefaultEqs();
     loadUiState();
     const hashView = location.hash.slice(1);
     const requestedView = ["presets", "customEqs"].includes(hashView) ? "dashboard" : hashView;
@@ -226,7 +241,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260803-native-icons-6").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260804-default-presets-7").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -783,7 +798,7 @@
   }
 
   async function applyCustomEqToSpeakers(customEqId, speakerIds) {
-    const customEq = state.customEqs.find((item) => item.id === customEqId);
+    const customEq = findCustomEq(customEqId);
     if (!customEq) return;
     const uniqueSpeakerIds = [...new Set(speakerIds.filter(Boolean))];
     const targets = uniqueSpeakerIds.map(getSpeaker).filter(isOnline);
@@ -800,6 +815,15 @@
   }
 
   function deleteCustomEq(customEqId) {
+    const localCustomEq = state.customEqs.find((item) => item.id === customEqId);
+    if (!localCustomEq) {
+      const reason = state.defaultEqs.some((item) => item.id === customEqId)
+        ? "repository preset is read-only"
+        : "preset not found";
+      logEvent("warn", "custom-eq", `delete blocked: ${reason}`);
+      render();
+      return;
+    }
     const next = state.customEqs.filter((item) => item.id !== customEqId);
     persistCustomEqs(next);
     state.customEqs = next;
@@ -875,7 +899,7 @@
     const online = state.speakers.filter(isOnline).length;
     $("#deviceCount").textContent = String(state.speakers.length);
     $("#onlineCount").textContent = String(online);
-    $("#customEqCount").textContent = String(state.customEqs.length);
+    $("#customEqCount").textContent = String(customEqLibrary().length);
     $("#sessionState").textContent = online ? "connected" : "idle";
     $("#sessionState").className = `status-pill ${online ? "ok" : ""}`;
   }
@@ -953,7 +977,7 @@
                       <span>Custom<br>EQ</span>
                     </button>
                     <select class="custom-eq-select" data-control="custom-eq-preset"
-                      data-speaker-id="${escapeAttr(speaker.id)}" ${online && state.customEqs.length ? "" : "disabled"}
+                      data-speaker-id="${escapeAttr(speaker.id)}" ${online && customEqLibrary().length ? "" : "disabled"}
                       aria-label="Gespeicherten Custom EQ waehlen" title="Gespeicherten Custom EQ waehlen">
                       ${customEqOptions(selectedCustomEqId)}
                     </select>
@@ -1016,8 +1040,7 @@
                   <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
                   <button class="eq-save-action" type="button" data-action="save-custom-eq"
                     data-speaker-id="${escapeAttr(speaker.id)}">Lokal speichern</button>
-                  <button class="eq-delete-action" type="button" data-action="delete-custom-eq"
-                    data-custom-eq-id="${escapeAttr(selectedCustomEqId)}" ${selectedCustomEqId ? "" : "disabled"}>Preset loeschen</button>
+                  ${deleteCustomEqButton(selectedCustomEqId)}
                 </div>
               </div>
               <div class="eq-curve" aria-hidden="true">
@@ -1170,7 +1193,7 @@
               aria-label="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"
               title="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"><span>Custom<br>EQ</span></button>
             <select class="custom-eq-select" data-control="group-custom-eq-preset"
-              data-group-id="${escapeAttr(group.id)}" ${context.online && state.customEqs.length ? "" : "disabled"}
+              data-group-id="${escapeAttr(group.id)}" ${context.online && customEqLibrary().length ? "" : "disabled"}
               aria-label="Gespeicherten Gruppen-EQ waehlen" title="Gespeicherten Gruppen-EQ waehlen">
               ${customEqOptions(selectedCustomEqId)}
             </select>
@@ -1238,8 +1261,7 @@
               <span class="eq-active">${escapeHtml(commonEqPreset ? EQ_LABELS[commonEqPreset] || commonEqPreset : "Mixed")}</span>
               <button class="eq-save-action" type="button" data-action="group-save-custom-eq"
                 data-group-id="${escapeAttr(group.id)}">Lokal speichern</button>
-              <button class="eq-delete-action" type="button" data-action="delete-custom-eq"
-                data-custom-eq-id="${escapeAttr(selectedCustomEqId)}" ${selectedCustomEqId ? "" : "disabled"}>Preset loeschen</button>
+              ${deleteCustomEqButton(selectedCustomEqId)}
             </div>
           </div>
           <div class="eq-curve" aria-hidden="true">
@@ -1336,7 +1358,7 @@
     let selectionChanged = false;
     if (patch.eq) {
       const selectedId = state.selectedCustomEq.get(speakerId);
-      const selectedEq = state.customEqs.find((item) => item.id === selectedId);
+      const selectedEq = findCustomEq(selectedId);
       if (!selectedEq || patch.eq.preset !== "custom" || !sameEqBands(patch.eq.bands, selectedEq.bands)) {
         selectionChanged = state.selectedCustomEq.delete(speakerId);
       }
@@ -1599,13 +1621,45 @@
   }
 
   function customEqOptions(selectedId) {
-    const placeholder = state.customEqs.length ? "Preset" : "Keine Presets";
+    const library = customEqLibrary();
+    const placeholder = library.length ? "Preset" : "Keine Presets";
     return [
       `<option value="">${placeholder}</option>`,
-      ...state.customEqs.map((customEq) => `
-        <option value="${escapeAttr(customEq.id)}" ${customEq.id === selectedId ? "selected" : ""}>${escapeHtml(customEq.name)}</option>
-      `)
+      state.defaultEqs.length ? `
+        <optgroup label="Standardpresets">
+          ${state.defaultEqs.map(customEqOption).join("")}
+        </optgroup>
+      ` : "",
+      state.customEqs.length ? `
+        <optgroup label="Eigene Presets">
+          ${state.customEqs.map(customEqOption).join("")}
+        </optgroup>
+      ` : ""
     ].join("");
+
+    function customEqOption(customEq) {
+      return `<option value="${escapeAttr(customEq.id)}" ${customEq.id === selectedId ? "selected" : ""}>${escapeHtml(customEq.name)}</option>`;
+    }
+  }
+
+  function deleteCustomEqButton(customEqId) {
+    const local = isLocalCustomEq(customEqId);
+    const label = local ? "Preset loeschen" : "Repository-Preset kann nicht geloescht werden";
+    return `<button class="eq-delete-action" type="button" data-action="delete-custom-eq"
+      data-custom-eq-id="${escapeAttr(customEqId)}" ${local ? "" : "disabled"}
+      aria-label="${label}" title="${label}">Preset loeschen</button>`;
+  }
+
+  function customEqLibrary() {
+    return [...state.defaultEqs, ...state.customEqs];
+  }
+
+  function findCustomEq(customEqId) {
+    return customEqLibrary().find((item) => item.id === customEqId);
+  }
+
+  function isLocalCustomEq(customEqId) {
+    return Boolean(customEqId) && state.customEqs.some((item) => item.id === customEqId);
   }
 
   function getSelectedCustomEqId(speakers) {
@@ -1613,7 +1667,7 @@
     const selectedIds = speakers.map((speaker) => state.selectedCustomEq.get(speaker.id) || "");
     const selectedId = selectedIds[0];
     if (!selectedId || !selectedIds.every((id) => id === selectedId)) return "";
-    const customEq = state.customEqs.find((item) => item.id === selectedId);
+    const customEq = findCustomEq(selectedId);
     if (!customEq) return "";
     return speakers.every((speaker) => sameEqBands(speaker.eq?.bands, customEq.bands))
       ? selectedId
@@ -1678,7 +1732,7 @@
       state.expandedCustomEq = new Set(normalizeStoredIds(parsed.expandedCustomEq));
       state.expandedGroupCustomEq = new Set(normalizeStoredIds(parsed.expandedGroupCustomEq));
       state.selectedCustomEq = new Map(normalizeStoredEntries(parsed.selectedCustomEq)
-        .filter(([, customEqId]) => state.customEqs.some((customEq) => customEq.id === customEqId)));
+        .filter(([, customEqId]) => Boolean(findCustomEq(customEqId))));
       state.groupScopes = new Map(normalizeStoredEntries(parsed.groupScopes));
     } catch (error) {
       logEvent("warn", "storage", `UI state: ${error.message}`);
@@ -1711,6 +1765,55 @@
     return value.filter((entry) => Array.isArray(entry) && entry.length === 2 &&
       typeof entry[0] === "string" && entry[0].length <= 120 &&
       typeof entry[1] === "string" && entry[1].length <= 120).slice(0, 50);
+  }
+
+  async function loadDefaultEqs() {
+    state.defaultEqs = FALLBACK_DEFAULT_EQS.map(normalizeRepositoryPreset).filter(Boolean);
+
+    try {
+      const catalogUrl = new URL(DEFAULT_PRESET_CATALOG_URL, document.baseURI);
+      const catalog = await fetchPresetJson(catalogUrl);
+      if (!catalog || catalog.schemaVersion !== 1 || !Array.isArray(catalog.presets)) {
+        throw new Error("invalid catalog format");
+      }
+
+      const filenames = [...new Set(catalog.presets)].filter((filename) =>
+        typeof filename === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*\.json$/.test(filename)
+      );
+      if (!filenames.length || filenames.length !== catalog.presets.length) {
+        throw new Error("catalog contains invalid preset paths");
+      }
+
+      const records = await Promise.all(filenames.map((filename) =>
+        fetchPresetJson(new URL(filename, catalogUrl))
+      ));
+      const presets = records.map(normalizeRepositoryPreset);
+      if (presets.some((preset) => !preset)) {
+        throw new Error("catalog contains an invalid preset");
+      }
+      if (new Set(presets.map((preset) => preset.id)).size !== presets.length) {
+        throw new Error("catalog contains duplicate preset ids");
+      }
+
+      state.defaultEqs = presets;
+      logEvent("preset", "repository", `loaded ${presets.length} default preset`);
+    } catch (error) {
+      logEvent("warn", "repository", `default presets: ${error.message}; fallback active`);
+    }
+  }
+
+  async function fetchPresetJson(url) {
+    const response = await fetch(url, {
+      cache: "no-cache",
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.json();
+  }
+
+  function normalizeRepositoryPreset(value) {
+    const preset = normalizeCustomEqRecord(value);
+    return preset ? { ...preset, origin: "repository", readOnly: true } : null;
   }
 
   function loadCustomEqs() {

@@ -42,8 +42,9 @@ Die aktuelle Version bietet:
 - sechs Custom-EQ-Baender `-10..10`
 - Stereo Role `M`, `L`, `R`
 - bis zu zehn lokale Custom-EQ-Presets im geraetebezogenen Browser-Cookie
+- schreibgeschuetzte Repository-Standardpresets unter `presets/defaults/`, beginnend mit `Default Flat` bei `[0, 0, 0, 0, 0, 0]`
 - Zielauswahl zum Anwenden eines Custom EQs auf einen oder alle verbundenen Speaker
-- versioniertes Community-Preset-Format unter [`presets/`](presets/README.md)
+- versioniertes Default- und Community-Preset-Format unter [`presets/`](presets/README.md)
 - Multi-Speaker Dashboard
 - gemeinsame Gruppenlautstaerke und Stereo-Routing fuer ein Speaker-Paar
 - Safety-Profile `Home 0-25`, `Chill 0-50`, `Party 0-255`
@@ -59,7 +60,7 @@ Die aktuelle Version bietet:
 - vertikaler Level-Fader links neben den dauerhaft sichtbaren Quick Actions
 - einheitliche vertikale Reihenfolge: System, EQ, Level, Stereo-Rolle und TeamUp
 - separat klappbarer Custom-EQ-Editor mit lokalem Speichern pro Speaker
-- konturierte Oktagon-Fader mit transparenter Schienenluecke, zentrierter Raw-Anzeige und einheitlich quadratischen 33-Prozent-Control-Oktagonen
+- konturierte Oktagon-Fader mit transparenter Schienenluecke, zentrierter Raw-Anzeige und regulaeren Control-Oktagonen mit `29.2893218813%` Chamfer
 - grosse Touch-Ziele, sichtbare Fokuszustaende und Reduced-Motion-Support
 
 ## Naechste technische Schritte

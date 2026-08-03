@@ -1,0 +1,15 @@
+{
+  "$schema": "../schema.json",
+  "schemaVersion": 1,
+  "id": "default-flat",
+  "name": "Default Flat",
+  "description": "Schreibgeschuetztes Standardpreset mit allen sechs EQ-Baendern auf null.",
+  "author": "Soundboks_FOH",
+  "deviceModel": "SOUNDBOKS 4",
+  "sourceDevice": "Soundboks_FOH Repository",
+  "bands": [0, 0, 0, 0, 0, 0],
+  "tags": ["default", "flat", "reference"],
+  "license": "CC0-1.0",
+  "createdAt": 0,
+  "updatedAt": 0
+}

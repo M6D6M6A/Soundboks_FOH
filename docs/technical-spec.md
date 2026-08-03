@@ -183,6 +183,7 @@ Empfohlener Stack:
 - PWA Setup
 - Zustand fuer App-State
 - Browser-Cookie fuer lokale Custom-EQ-Presets im MVP
+- schreibgeschuetzte Default-Presets mit statischem Katalog unter `presets/defaults`
 - versionierte Community-Presets als JSON unter `presets/community`
 - kein Backend im MVP
 

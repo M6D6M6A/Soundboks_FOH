@@ -1,10 +1,12 @@
-const CACHE_NAME = "soundboks-foh-v16";
+const CACHE_NAME = "soundboks-foh-v17";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./manifest.webmanifest",
+  "./presets/defaults/catalog.json",
+  "./presets/defaults/default-flat.json",
   "./assets/icon.svg",
   "./assets/brand-icon-48.svg",
   "./assets/favicon-16.svg",
