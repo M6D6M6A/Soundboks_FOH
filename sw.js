@@ -1,4 +1,4 @@
-const CACHE_NAME = "soundboks-foh-v14";
+const CACHE_NAME = "soundboks-foh-v16";
 const ASSETS = [
   "./",
   "./index.html",
@@ -6,6 +6,17 @@ const ASSETS = [
   "./app.js",
   "./manifest.webmanifest",
   "./assets/icon.svg",
+  "./assets/brand-icon-48.svg",
+  "./assets/favicon-16.svg",
+  "./assets/favicon-32.svg",
+  "./assets/apple-touch-icon.svg",
+  "./assets/app-icon-192.svg",
+  "./assets/app-icon-512.svg",
+  "./assets/favicon-16.png",
+  "./assets/favicon-32.png",
+  "./assets/apple-touch-icon.png",
+  "./assets/app-icon-192.png",
+  "./assets/app-icon-512.png",
   "./assets/control-slider-thumb.svg",
   "./assets/control-slider-thumb-vertical.svg",
   "./assets/control-track-end-left.svg",

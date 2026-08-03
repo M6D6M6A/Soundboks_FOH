@@ -32,8 +32,9 @@
   const ROLE_VALUES = ["L", "M", "R"];
   const TEAMUP_VALUES = ["solo", "host", "join"];
   const TEAMUP_LABELS = { solo: "Solo", host: "Host", join: "Join" };
-  const VIEW_IDS = ["dashboard", "groups", "customEqs", "diagnostics"];
+  const VIEW_IDS = ["dashboard", "groups", "diagnostics"];
   const CUSTOM_EQ_COOKIE = "soundboks_foh_custom_eqs_v1";
+  const UI_STATE_STORAGE = "soundboks_foh_ui_state_v1";
   const MAX_LOCAL_CUSTOM_EQS = 10;
   const DEFAULT_EQ = { preset: "dancefloor", bands: [0, 0, 0, 0, 0, 0] };
   const DEFAULT_GROUPS = [
@@ -56,7 +57,10 @@
     diagnostics: [],
     clients: new Map(),
     writeTimers: new Map(),
-    expandedCustomEq: new Set()
+    expandedCustomEq: new Set(),
+    expandedGroupCustomEq: new Set(),
+    selectedCustomEq: new Map(),
+    groupScopes: new Map()
   };
 
   const $ = (selector) => document.querySelector(selector);
@@ -205,12 +209,14 @@
 
   async function init() {
     state.support = detectSupport();
-    const requestedView = location.hash.slice(1) === "presets" ? "customEqs" : location.hash.slice(1);
+    bindEvents();
+    loadCustomEqs();
+    loadUiState();
+    const hashView = location.hash.slice(1);
+    const requestedView = ["presets", "customEqs"].includes(hashView) ? "dashboard" : hashView;
     if (VIEW_IDS.includes(requestedView)) {
       state.view = requestedView;
     }
-    bindEvents();
-    loadCustomEqs();
     render();
     if (new URLSearchParams(location.search).get("demo") === "1") {
       loadDemoSetup();
@@ -220,7 +226,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260803-vertical-eq-library-4").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260803-native-icons-6").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -259,6 +265,7 @@
 
       if (button.dataset.limit) {
         state.activeLimit = button.dataset.limit;
+        persistUiState();
         render();
         return;
       }
@@ -268,15 +275,17 @@
       try {
         await handleAction(action, speakerId, button.dataset);
       } catch (error) {
-        logEvent("error", speakerId || "app", error.message);
-        updateSpeaker(speakerId, { error: error.message });
+        const actionTarget = speakerId || button.dataset.groupId || "app";
+        logEvent("error", actionTarget, error.message);
+        if (speakerId) updateSpeaker(speakerId, { error: error.message });
       }
     });
 
     document.addEventListener("change", async (event) => {
       const target = event.target;
       const speakerId = target.dataset.speakerId;
-      if (!speakerId) return;
+      const groupId = target.dataset.groupId;
+      if (!speakerId && !groupId) return;
 
       try {
         if (target.dataset.control === "volume") {
@@ -285,17 +294,29 @@
         if (target.dataset.control === "band") {
           await setEqBand(speakerId, Number(target.dataset.band), Number(target.value));
         }
+        if (target.dataset.control === "custom-eq-preset" && target.value) {
+          await applyCustomEqToSpeakers(target.value, [speakerId]);
+        }
+        if (target.dataset.control === "group-volume") {
+          await setGroupVolume(groupId, Number(target.value));
+        }
+        if (target.dataset.control === "group-band") {
+          await setGroupEqBand(groupId, Number(target.dataset.band), Number(target.value));
+        }
+        if (target.dataset.control === "group-custom-eq-preset" && target.value) {
+          await applyCustomEqToSpeakers(target.value, getGroupActionTargets(groupId).map((speaker) => speaker.id));
+        }
       } catch (error) {
-        logEvent("error", speakerId, error.message);
+        logEvent("error", speakerId || groupId, error.message);
       }
     });
 
     document.addEventListener("input", (event) => {
       const target = event.target;
       const speakerId = target.dataset.speakerId;
-      if (!speakerId) return;
+      const groupId = target.dataset.groupId;
 
-      if (target.dataset.control === "volume") {
+      if (speakerId && target.dataset.control === "volume") {
         const rawVolume = clamp(Number(target.value), 0, 255);
         const speaker = getSpeaker(speakerId);
         if (!speaker) return;
@@ -305,7 +326,7 @@
         scheduleWrite(`volume:${speakerId}`, () => setVolume(speakerId, rawVolume), 160);
       }
 
-      if (target.dataset.control === "band") {
+      if (speakerId && target.dataset.control === "band") {
         const value = clamp(Number(target.value), -10, 10);
         const control = target.closest(".band-control");
         const valueLabel = control?.querySelector(".band-value");
@@ -315,6 +336,22 @@
         if (curveBars?.[Number(target.dataset.band)]) {
           curveBars[Number(target.dataset.band)].style.height = `${44 + value * 3}px`;
         }
+      }
+
+      if (groupId && target.dataset.control === "group-volume") {
+        const rawVolume = clamp(Number(target.value), 0, 255);
+        const group = getGroup(groupId);
+        if (!group) return;
+        getGroupSpeakers(group).forEach((speaker) => {
+          speaker.rawVolume = rawVolume;
+        });
+        target.style.setProperty("--fader-position", faderPosition(rawVolume, 0, 255, true));
+        updateGroupVolumeDom(groupId, rawVolume);
+        scheduleWrite(`group-volume:${groupId}`, () => setGroupVolume(groupId, rawVolume), 160);
+      }
+
+      if (groupId && target.dataset.control === "group-band") {
+        updateBandControlDom(target, Number(target.value));
       }
     });
   }
@@ -395,9 +432,14 @@
     if (action === "disconnect-all") return disconnectAll();
     if (action === "clear-log") return clearLog();
     if (action === "delete-custom-eq") return deleteCustomEq(dataset.customEqId);
-    if (action === "apply-custom-eq") return applyCustomEq(dataset.customEqId);
-    if (action === "group-route") return applyGroupRoute(dataset.groupId, dataset.route);
+    if (action === "group-scope") return setGroupScope(dataset.groupId, dataset.scope);
+    if (action === "group-toggle-custom-eq") return toggleGroupCustomEq(dataset.groupId);
+    if (action === "group-save-custom-eq") return saveCurrentGroupCustomEq(dataset.groupId);
+    if (action === "group-eq-preset") return setGroupEqPreset(dataset.groupId, dataset.preset);
+    if (action === "group-role") return setGroupRole(dataset.groupId, dataset.value);
+    if (action === "group-teamup") return setGroupTeamUpMode(dataset.groupId, dataset.mode);
     if (action === "group-volume") return adjustGroupVolume(dataset.groupId, Number(dataset.delta));
+    if (action === "group-volume-set") return setGroupVolume(dataset.groupId, Number(dataset.value));
 
     if (!speakerId) return;
     if (action === "save-custom-eq") return saveCurrentCustomEq(speakerId);
@@ -418,6 +460,7 @@
     } else {
       state.expandedCustomEq.delete(speakerId);
     }
+    persistUiState();
 
     const card = document.querySelector(`[data-card-speaker="${cssEscape(speakerId)}"]`);
     const toggle = card?.querySelector('[data-action="toggle-custom-eq"]');
@@ -433,6 +476,17 @@
     toggle.setAttribute("aria-expanded", String(expanded));
     toggle.setAttribute("aria-label", expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden");
     toggle.title = expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden";
+  }
+
+  function toggleGroupCustomEq(groupId) {
+    const expanded = !state.expandedGroupCustomEq.has(groupId);
+    if (expanded) {
+      state.expandedGroupCustomEq.add(groupId);
+    } else {
+      state.expandedGroupCustomEq.delete(groupId);
+    }
+    persistUiState();
+    renderGroups();
   }
 
   function loadDemoSetup() {
@@ -462,7 +516,6 @@
     };
     state.speakers = state.speakers.filter((speaker) => !speaker.demo);
     state.speakers.unshift(demoOne, demoTwo);
-    state.expandedCustomEq.clear();
     state.groups = [
       {
         id: "front-pair",
@@ -520,7 +573,7 @@
     await setVolume(speakerId, Number(speaker.rawVolume || 0) + delta);
   }
 
-  async function setVolume(speakerId, value) {
+  async function setVolume(speakerId, value, shouldRender = true) {
     const speaker = getSpeaker(speakerId);
     if (!speaker) return;
     const limit = getActiveLimit();
@@ -531,10 +584,10 @@
     } else {
       logEvent("write", speakerId, `demo volume ${rawVolume}`);
     }
-    render();
+    if (shouldRender) render();
   }
 
-  async function setTeamUpMode(speakerId, mode) {
+  async function setTeamUpMode(speakerId, mode, shouldRender = true) {
     const speaker = getSpeaker(speakerId);
     if (!speaker || !TEAMUP_VALUES.includes(mode)) return;
     speaker.teamUpMode = mode;
@@ -543,10 +596,10 @@
     } else {
       logEvent("write", speakerId, `demo teamUp ${mode}`);
     }
-    render();
+    if (shouldRender) render();
   }
 
-  async function setStereoRole(speakerId, role) {
+  async function setStereoRole(speakerId, role, shouldRender = true) {
     const speaker = getSpeaker(speakerId);
     if (!speaker || !ROLE_VALUES.includes(role)) return;
     speaker.stereoRole = role;
@@ -555,27 +608,31 @@
     } else {
       logEvent("write", speakerId, `demo stereo ${role}`);
     }
-    render();
+    if (shouldRender) render();
   }
 
-  async function setEqPreset(speakerId, preset) {
+  async function setEqPreset(speakerId, preset, shouldRender = true) {
     const speaker = getSpeaker(speakerId);
     if (!speaker || !EQ_PRESETS.includes(preset)) return;
+    const selectionChanged = state.selectedCustomEq.delete(speakerId);
+    if (selectionChanged) persistUiState();
     speaker.eq = speaker.eq || structuredCloneSafe(DEFAULT_EQ);
     speaker.eq.preset = preset;
-    await writeEq(speakerId, speaker.eq);
+    await writeEq(speakerId, speaker.eq, shouldRender);
   }
 
-  async function setEqBand(speakerId, band, value) {
+  async function setEqBand(speakerId, band, value, shouldRender = true) {
     const speaker = getSpeaker(speakerId);
     if (!speaker || band < 0 || band > 5) return;
+    const selectionChanged = state.selectedCustomEq.delete(speakerId);
+    if (selectionChanged) persistUiState();
     speaker.eq = speaker.eq || structuredCloneSafe(DEFAULT_EQ);
     speaker.eq.bands[band] = clamp(value, -10, 10);
     speaker.eq.preset = "custom";
-    await writeEq(speakerId, speaker.eq);
+    await writeEq(speakerId, speaker.eq, shouldRender);
   }
 
-  async function writeEq(speakerId, eq) {
+  async function writeEq(speakerId, eq, shouldRender = true) {
     const speaker = getSpeaker(speakerId);
     if (!speaker) return;
     if (!speaker.demo) {
@@ -583,44 +640,118 @@
     } else {
       logEvent("write", speakerId, `demo eq ${eq.preset}`);
     }
-    render();
+    if (shouldRender) render();
   }
 
   async function applyGroupRoute(groupId, route) {
-    const group = state.groups.find((item) => item.id === groupId);
+    const group = getGroup(groupId);
     if (!group || !isGroupOnline(group)) return;
     const [first, second] = group.speakerIds;
     if (route === "mono_both") {
-      await Promise.all([setStereoRole(first, "M"), setStereoRole(second, "M")]);
+      await Promise.all([setStereoRole(first, "M", false), setStereoRole(second, "M", false)]);
     }
     if (route === "left_right") {
-      await Promise.all([setStereoRole(first, "L"), setStereoRole(second, "R")]);
+      await Promise.all([setStereoRole(first, "L", false), setStereoRole(second, "R", false)]);
     }
     if (route === "right_left") {
-      await Promise.all([setStereoRole(first, "R"), setStereoRole(second, "L")]);
-    }
-    if (route === "swap_left") {
-      const speakerA = getSpeaker(first);
-      const speakerB = getSpeaker(second);
-      await Promise.all([
-        setStereoRole(first, speakerB?.stereoRole || "R"),
-        setStereoRole(second, speakerA?.stereoRole || "L")
-      ]);
+      await Promise.all([setStereoRole(first, "R", false), setStereoRole(second, "L", false)]);
     }
     group.routingPreset = route;
     render();
   }
 
   async function adjustGroupVolume(groupId, delta) {
-    const group = state.groups.find((item) => item.id === groupId);
+    const group = getGroup(groupId);
     if (!group || !isGroupOnline(group)) return;
-    await Promise.all(group.speakerIds.map((speakerId) => adjustVolume(speakerId, delta)));
+    await setGroupVolume(groupId, groupRawVolume(group) + delta);
+  }
+
+  async function setGroupVolume(groupId, value) {
+    const group = getGroup(groupId);
+    if (!group || !isGroupOnline(group)) return;
+    const limit = getActiveLimit();
+    const rawVolume = clamp(value, limit.minRaw, limit.maxRaw);
+    await Promise.all(group.speakerIds.map((speakerId) => setVolume(speakerId, rawVolume, false)));
+    render();
+  }
+
+  async function setGroupEqPreset(groupId, preset) {
+    if (!EQ_PRESETS.includes(preset)) return;
+    const targets = getGroupActionTargets(groupId);
+    if (!targets.length) return;
+    await Promise.all(targets.map((speaker) => setEqPreset(speaker.id, preset, false)));
+    render();
+  }
+
+  async function setGroupEqBand(groupId, band, value) {
+    const targets = getGroupActionTargets(groupId);
+    if (!targets.length || band < 0 || band >= EQ_BANDS.length) return;
+    await Promise.all(targets.map((speaker) => setEqBand(speaker.id, band, value, false)));
+    render();
+  }
+
+  async function setGroupRole(groupId, value) {
+    const group = getGroup(groupId);
+    if (!group || !isGroupOnline(group)) return;
+    const scope = getGroupScope(group);
+    if (scope === "group") {
+      await applyGroupRoute(groupId, value);
+      return;
+    }
+    if (!ROLE_VALUES.includes(value)) return;
+    await setStereoRole(scope, value, false);
+    render();
+  }
+
+  async function setGroupTeamUpMode(groupId, mode) {
+    const group = getGroup(groupId);
+    if (!group || !isGroupOnline(group) || !TEAMUP_VALUES.includes(mode)) return;
+    const scope = getGroupScope(group);
+    if (scope !== "group") {
+      await setTeamUpMode(scope, mode, false);
+      render();
+      return;
+    }
+
+    if (mode === "host") {
+      const [hostId, ...joinIds] = group.speakerIds;
+      await Promise.all([
+        setTeamUpMode(hostId, "host", false),
+        ...joinIds.map((speakerId) => setTeamUpMode(speakerId, "join", false))
+      ]);
+    } else {
+      await Promise.all(group.speakerIds.map((speakerId) => setTeamUpMode(speakerId, mode, false)));
+    }
+    render();
+  }
+
+  function setGroupScope(groupId, scope) {
+    const group = getGroup(groupId);
+    if (!group || (scope !== "group" && !group.speakerIds.includes(scope))) return;
+    state.groupScopes.set(groupId, scope);
+    persistUiState();
+    renderGroups();
   }
 
   function saveCurrentCustomEq(speakerId) {
     const speaker = getSpeaker(speakerId);
+    if (!speaker) return;
+    saveCustomEqFromSpeaker(speaker, speakerDisplayId(speaker), [speaker.id]);
+  }
+
+  function saveCurrentGroupCustomEq(groupId) {
+    const group = getGroup(groupId);
+    const targets = getGroupActionTargets(groupId);
+    const source = targets[0];
+    if (!group || !source) return;
+    const scope = getGroupScope(group);
+    const sourceLabel = scope === "group" ? group.name : speakerDisplayId(source);
+    saveCustomEqFromSpeaker(source, sourceLabel, targets.map((speaker) => speaker.id));
+  }
+
+  function saveCustomEqFromSpeaker(speaker, sourceLabel, selectedSpeakerIds) {
     if (!speaker?.eq) return;
-    const suggestedName = `${speakerDisplayId(speaker)} EQ`;
+    const suggestedName = `${sourceLabel} EQ`;
     const requestedName = window.prompt("Custom-EQ-Name", suggestedName);
     const name = String(requestedName || "").trim().slice(0, 60);
     if (!name) return;
@@ -631,7 +762,7 @@
       id: createId("custom-eq"),
       name,
       deviceModel: "SOUNDBOKS 4",
-      sourceDevice: speakerDisplayId(speaker),
+      sourceDevice: sourceLabel,
       bands: normalizeCustomEqBands(speaker.eq.bands),
       createdAt: now,
       updatedAt: now
@@ -640,24 +771,30 @@
     const next = [customEq, ...state.customEqs].slice(0, MAX_LOCAL_CUSTOM_EQS);
     persistCustomEqs(next);
     state.customEqs = next;
+    selectedSpeakerIds.forEach((speakerId) => {
+      const selectedSpeaker = getSpeaker(speakerId);
+      if (sameEqBands(selectedSpeaker?.eq?.bands, customEq.bands)) {
+        state.selectedCustomEq.set(speakerId, customEq.id);
+      }
+    });
+    persistUiState();
     logEvent("storage", "custom-eq", `saved ${customEq.name}`);
     render();
   }
 
-  async function applyCustomEq(customEqId) {
+  async function applyCustomEqToSpeakers(customEqId, speakerIds) {
     const customEq = state.customEqs.find((item) => item.id === customEqId);
     if (!customEq) return;
-    const card = document.querySelector(`[data-custom-eq-id="${cssEscape(customEqId)}"]`);
-    const targetValue = card?.querySelector("[data-custom-eq-target]")?.value || "all";
-    const targets = targetValue === "all"
-      ? state.speakers.filter(isOnline)
-      : state.speakers.filter((speaker) => speaker.id === targetValue && isOnline(speaker));
+    const uniqueSpeakerIds = [...new Set(speakerIds.filter(Boolean))];
+    const targets = uniqueSpeakerIds.map(getSpeaker).filter(isOnline);
     if (!targets.length) throw new Error("Kein verbundener Speaker fuer dieses Custom EQ ausgewaehlt.");
 
-    for (const speaker of targets) {
+    await Promise.all(targets.map(async (speaker) => {
       speaker.eq = { preset: "custom", bands: [...customEq.bands] };
-      await writeEq(speaker.id, speaker.eq);
-    }
+      state.selectedCustomEq.set(speaker.id, customEq.id);
+      await writeEq(speaker.id, speaker.eq, false);
+    }));
+    persistUiState();
     logEvent("storage", "custom-eq", `applied ${customEq.name} to ${targets.length} speaker`);
     render();
   }
@@ -666,6 +803,10 @@
     const next = state.customEqs.filter((item) => item.id !== customEqId);
     persistCustomEqs(next);
     state.customEqs = next;
+    for (const [speakerId, selectedId] of state.selectedCustomEq.entries()) {
+      if (selectedId === customEqId) state.selectedCustomEq.delete(speakerId);
+    }
+    persistUiState();
     logEvent("storage", "custom-eq", `deleted ${customEqId}`);
     render();
   }
@@ -677,7 +818,6 @@
     renderStats();
     renderSpeakers();
     renderGroups();
-    renderCustomEqs();
     renderDiagnostics();
   }
 
@@ -761,6 +901,8 @@
     const volumeFaderPosition = faderPosition(raw, 0, 255, true);
     const expanded = state.expandedCustomEq.has(speaker.id);
     const accordionId = `custom-eq-${cardIndex}`;
+    const selectedCustomEqId = getSelectedCustomEqId([speaker]);
+    const customEqActive = expanded || eq.preset === "custom" || Boolean(selectedCustomEqId);
     const stereoRole = ROLE_VALUES.includes(speaker.stereoRole) ? speaker.stereoRole : "M";
     const teamUpMode = TEAMUP_VALUES.includes(speaker.teamUpMode) ? speaker.teamUpMode : "solo";
     const speakerTitle = `${speakerDisplayId(speaker)} | ${stereoRole} | ${TEAMUP_LABELS[teamUpMode]} | ${EQ_LABELS[eq.preset] || EQ_LABELS.custom}`;
@@ -802,11 +944,20 @@
                     aria-label="Power off" title="Power-off BLE command not mapped">
                     <span class="power-icon" aria-hidden="true"></span>
                   </button>
-                  <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
-                    aria-label="SKAA Pro" title="SKAA Pro BLE command not mapped"><span>SKAA<br>Pro</span></button>
-                  <button class="mode-button quick-action-button ${eq.preset === "custom" ? "is-active" : ""}" type="button" ${disabled}
-                    data-action="eq-preset" data-preset="custom" data-speaker-id="${escapeAttr(speaker.id)}"
-                    aria-pressed="${String(eq.preset === "custom")}"><span>Custom<br>EQ</span></button>
+                  <div class="custom-eq-combo ${customEqActive ? "is-active" : ""}">
+                    <button class="custom-eq-toggle" type="button" ${disabled}
+                      data-action="toggle-custom-eq" data-speaker-id="${escapeAttr(speaker.id)}"
+                      aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
+                      aria-label="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"
+                      title="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}">
+                      <span>Custom<br>EQ</span>
+                    </button>
+                    <select class="custom-eq-select" data-control="custom-eq-preset"
+                      data-speaker-id="${escapeAttr(speaker.id)}" ${online && state.customEqs.length ? "" : "disabled"}
+                      aria-label="Gespeicherten Custom EQ waehlen" title="Gespeicherten Custom EQ waehlen">
+                      ${customEqOptions(selectedCustomEqId)}
+                    </select>
+                  </div>
                 </div>
 
                 <div class="control-divider" aria-hidden="true"></div>
@@ -829,13 +980,8 @@
                   <output class="level-badge" data-level-readout="${escapeAttr(speaker.id)}" aria-label="Level ${level}">${level}</output>
                   ${stepButton(speaker.id, "+1", 1, "step", disabled)}
                   ${stepButton(speaker.id, "-10", -10, "step", disabled)}
-                  <button class="settings-toggle" type="button"
-                    data-action="toggle-custom-eq" data-speaker-id="${escapeAttr(speaker.id)}"
-                    aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
-                    aria-label="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"
-                    title="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}">
-                    <span class="accordion-glyph" aria-hidden="true"></span>
-                  </button>
+                  <button class="mode-button protocol-unavailable" type="button" disabled
+                    aria-label="SKAA Pro" title="SKAA Pro BLE command not mapped"><span>SKAA<br>Pro</span></button>
                   ${stepButton(speaker.id, "+10", 10, "step", disabled)}
                 </div>
 
@@ -870,6 +1016,8 @@
                   <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
                   <button class="eq-save-action" type="button" data-action="save-custom-eq"
                     data-speaker-id="${escapeAttr(speaker.id)}">Lokal speichern</button>
+                  <button class="eq-delete-action" type="button" data-action="delete-custom-eq"
+                    data-custom-eq-id="${escapeAttr(selectedCustomEqId)}" ${selectedCustomEqId ? "" : "disabled"}>Preset loeschen</button>
                 </div>
               </div>
               <div class="eq-curve" aria-hidden="true">
@@ -911,83 +1059,238 @@
 
   function renderGroups() {
     const grid = $("#groupsGrid");
-    const group = normalizeDefaultGroup();
-    grid.innerHTML = state.groups.map((item) => renderGroupCard(item)).join("") || renderEmptyMessage("Keine Gruppen definiert.");
-    if (!state.groups.length && group) render();
+    normalizeDefaultGroup();
+    grid.innerHTML = state.groups.map(renderGroupControlCard).join("") || renderEmptyMessage("Keine Gruppen definiert.");
   }
 
-  function renderGroupCard(group) {
+  function renderGroupControlCard(group, cardIndex) {
     const online = isGroupOnline(group);
-    const speakers = group.speakerIds.map(getSpeaker).filter(Boolean);
-    const statusClass = online ? "ok" : "warn";
+    const speakers = getGroupSpeakers(group);
+    const disabled = online ? "" : "disabled";
+    const scope = getGroupScope(group);
+    const actionTargets = getGroupActionTargets(group.id);
+    const referenceSpeaker = actionTargets[0] || speakers[0];
+    const eq = referenceSpeaker?.eq || structuredCloneSafe(DEFAULT_EQ);
+    const raw = groupRawVolume(group);
+    const expanded = state.expandedGroupCustomEq.has(group.id);
+    const selectedCustomEqId = getSelectedCustomEqId(actionTargets);
+    const commonEqPreset = getCommonSpeakerValue(actionTargets, (speaker) => speaker.eq?.preset);
+    const scopeLabel = scope === "group"
+      ? "Gruppe"
+      : speakerDisplayId(getSpeaker(scope) || { id: scope });
+    const context = {
+      group,
+      online,
+      speakers,
+      disabled,
+      scope,
+      scopeLabel,
+      actionTargets,
+      eq,
+      raw,
+      expanded,
+      selectedCustomEqId,
+      commonEqPreset,
+      accordionId: `group-custom-eq-${cardIndex}`
+    };
+
     return `
-      <article class="group-card">
-        <div class="card-heading">
-          <div>
-            <h2>${escapeHtml(group.name)}</h2>
-            <p class="muted">${speakers.map((speaker) => escapeHtml(speaker.teamId || speaker.name)).join(" + ") || "Noch keine Speaker"}</p>
+      <article class="speaker-card group-control-card ${expanded ? "is-custom-eq-expanded" : ""}" data-card-group="${escapeAttr(group.id)}">
+        <div class="card-heading speaker-panel speaker-card__title">
+          <div class="speaker-title">
+            <h2>${escapeHtml(group.name)} | ${escapeHtml(scopeLabel)}</h2>
+            <p class="group-members">${speakers.map((speaker) => escapeHtml(speakerDisplayId(speaker))).join(" + ") || "Noch keine Speaker"}</p>
           </div>
-          <span class="status-pill ${statusClass}">${online ? "online" : "waiting"}</span>
+          <span class="status-pill ${online ? "ok" : "warn"}">${online ? "online" : "waiting"}</span>
         </div>
-        <p class="muted">Gruppenaktionen schreiben parallel auf alle enthaltenen Speaker. Open Protocol Fields bleiben unberuehrt.</p>
-        <div class="group-actions">
-          <button class="chip-button" type="button" ${online ? "" : "disabled"} data-action="group-route" data-group-id="${escapeAttr(group.id)}" data-route="mono_both">Mono beide</button>
-          <button class="chip-button" type="button" ${online ? "" : "disabled"} data-action="group-route" data-group-id="${escapeAttr(group.id)}" data-route="left_right">L/R</button>
-          <button class="chip-button" type="button" ${online ? "" : "disabled"} data-action="group-route" data-group-id="${escapeAttr(group.id)}" data-route="right_left">R/L</button>
-          <button class="chip-button" type="button" ${online ? "" : "disabled"} data-action="group-route" data-group-id="${escapeAttr(group.id)}" data-route="swap_left">Left tauschen</button>
-          <button class="chip-button" type="button" ${online ? "" : "disabled"} data-action="group-volume" data-group-id="${escapeAttr(group.id)}" data-delta="-1">Gruppe -1</button>
-          <button class="chip-button" type="button" ${online ? "" : "disabled"} data-action="group-volume" data-group-id="${escapeAttr(group.id)}" data-delta="1">Gruppe +1</button>
-        </div>
+
+        <section class="speaker-settings speaker-panel">
+          <div class="group-scope-bar">
+            <span class="section-label">Action Scope</span>
+            <div class="group-scope-switch" role="group" aria-label="Gruppenaktionen anwenden auf">
+              <button class="scope-button ${scope === "group" ? "is-active" : ""}" type="button"
+                data-action="group-scope" data-group-id="${escapeAttr(group.id)}" data-scope="group"
+                aria-pressed="${String(scope === "group")}">Gruppe</button>
+              ${speakers.map((speaker, index) => `
+                <button class="scope-button ${scope === speaker.id ? "is-active" : ""}" type="button"
+                  data-action="group-scope" data-group-id="${escapeAttr(group.id)}" data-scope="${escapeAttr(speaker.id)}"
+                  aria-pressed="${String(scope === speaker.id)}" title="${escapeAttr(speakerDisplayId(speaker))}">SB ${index + 1}</button>
+              `).join("")}
+            </div>
+          </div>
+
+          <div class="speaker-control-deck">
+            <div class="meter-wrap">
+              <div class="fader-head"><span class="section-label">Level</span></div>
+              <div class="vertical-fader-slot">
+                <input class="range range--vertical" type="range" min="0" max="255" value="${raw}" ${disabled}
+                  style="--fader-position: ${faderPosition(raw, 0, 255, true)}"
+                  aria-label="Gruppenlautstaerke ${escapeAttr(group.name)}"
+                  data-control="group-volume" data-group-id="${escapeAttr(group.id)}">
+              </div>
+              <p class="meter-caption">
+                <span data-group-volume-summary="${escapeAttr(group.id)}">${formatVolumeSummary(raw)}</span>
+                <output class="meter-raw" data-group-raw-volume="${escapeAttr(group.id)}" aria-label="Raw volume ${raw} von 255">${raw} / 255</output>
+                <span>Limit: ${escapeHtml(state.activeLimit)}</span>
+              </p>
+            </div>
+
+            <div class="control-divider deck-divider" aria-hidden="true"></div>
+            <div class="quick-actions-shell">${renderGroupQuickActions(context)}</div>
+          </div>
+
+          ${renderGroupEqEditor(context)}
+        </section>
       </article>
     `;
   }
 
-  function renderCustomEqs() {
-    const grid = $("#customEqGrid");
-    if (!state.customEqs.length) {
-      grid.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-visual" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-          <h2>Noch keine Custom EQs</h2>
-          <p>Der lokale Cookie-Speicher ist leer.</p>
+  function renderGroupQuickActions(context) {
+    const {
+      group,
+      disabled,
+      scope,
+      actionTargets,
+      expanded,
+      selectedCustomEqId,
+      commonEqPreset,
+      accordionId
+    } = context;
+    const customEqActive = expanded || commonEqPreset === "custom" || Boolean(selectedCustomEqId);
+
+    return `
+      <div class="mode-control-layout">
+        <div class="mode-stack quick-stack quick-stack--system" role="group" aria-label="System and Custom actions">
+          <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
+            aria-label="Power off" title="Power-off BLE command not mapped"><span class="power-icon" aria-hidden="true"></span></button>
+          <div class="custom-eq-combo ${customEqActive ? "is-active" : ""}">
+            <button class="custom-eq-toggle" type="button" ${disabled}
+              data-action="group-toggle-custom-eq" data-group-id="${escapeAttr(group.id)}"
+              aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
+              aria-label="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"
+              title="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"><span>Custom<br>EQ</span></button>
+            <select class="custom-eq-select" data-control="group-custom-eq-preset"
+              data-group-id="${escapeAttr(group.id)}" ${context.online && state.customEqs.length ? "" : "disabled"}
+              aria-label="Gespeicherten Gruppen-EQ waehlen" title="Gespeicherten Gruppen-EQ waehlen">
+              ${customEqOptions(selectedCustomEqId)}
+            </select>
+          </div>
         </div>
-      `;
-      return;
+
+        <div class="control-divider" aria-hidden="true"></div>
+
+        <div class="mode-stack quick-stack quick-stack--eq" role="group" aria-label="Quick EQ Presets">
+          ${QUICK_EQ_PRESETS.map((preset) => {
+            const active = actionTargets.length > 0 && actionTargets.every((speaker) => speaker.eq?.preset === preset);
+            return `
+              <button class="mode-button quick-action-button ${active ? "is-active" : ""}" type="button" ${disabled}
+                data-action="group-eq-preset" data-preset="${preset}" data-group-id="${escapeAttr(group.id)}"
+                aria-pressed="${String(active)}"><span>${preset === "dancefloor" ? "Dance<wbr>floor" : EQ_LABELS[preset]}</span></button>
+            `;
+          }).join("")}
+        </div>
+
+        <div class="control-divider" aria-hidden="true"></div>
+
+        <div class="level-control-grid" role="group" aria-label="Gruppenlautstaerke">
+          ${groupStepButton(group.id, "min", 0, "set", disabled)}
+          ${groupStepButton(group.id, "mid", 128, "set", disabled)}
+          ${groupStepButton(group.id, "max", 255, "set", disabled)}
+          ${groupStepButton(group.id, "-1", -1, "step", disabled)}
+          <output class="level-badge" data-group-level-readout="${escapeAttr(group.id)}" aria-label="Level ${levelNumberFromRaw(context.raw)}">${levelNumberFromRaw(context.raw)}</output>
+          ${groupStepButton(group.id, "+1", 1, "step", disabled)}
+          ${groupStepButton(group.id, "-10", -10, "step", disabled)}
+          <button class="mode-button protocol-unavailable" type="button" disabled
+            aria-label="SKAA Pro" title="SKAA Pro BLE command not mapped"><span>SKAA<br>Pro</span></button>
+          ${groupStepButton(group.id, "+10", 10, "step", disabled)}
+        </div>
+
+        <div class="control-divider" aria-hidden="true"></div>
+
+        <div class="mode-stack mode-stack--role" role="group" aria-label="Stereo Role">
+          ${renderGroupRoleButtons(group, scope, disabled)}
+        </div>
+
+        <div class="control-divider" aria-hidden="true"></div>
+
+        <div class="mode-stack mode-stack--team" role="group" aria-label="TeamUp Mode">
+          ${TEAMUP_VALUES.map((mode) => {
+            const active = isGroupTeamModeActive(group, scope, mode);
+            return `
+              <button class="mode-button ${active ? "is-active" : ""}" type="button" ${disabled}
+                data-action="group-teamup" data-mode="${mode}" data-group-id="${escapeAttr(group.id)}"
+                aria-pressed="${String(active)}"><span>${TEAMUP_LABELS[mode]}</span></button>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderGroupEqEditor(context) {
+    const { group, disabled, scopeLabel, eq, expanded, selectedCustomEqId, commonEqPreset, accordionId } = context;
+    return `
+      <div id="${accordionId}" class="custom-eq-accordion" ${expanded ? "" : "hidden"} aria-hidden="${String(!expanded)}">
+        <div class="control-section eq-panel">
+          <div class="eq-header">
+            <span class="section-label">Custom EQ / ${escapeHtml(scopeLabel)}</span>
+            <div class="eq-header-tools">
+              <span class="eq-active">${escapeHtml(commonEqPreset ? EQ_LABELS[commonEqPreset] || commonEqPreset : "Mixed")}</span>
+              <button class="eq-save-action" type="button" data-action="group-save-custom-eq"
+                data-group-id="${escapeAttr(group.id)}">Lokal speichern</button>
+              <button class="eq-delete-action" type="button" data-action="delete-custom-eq"
+                data-custom-eq-id="${escapeAttr(selectedCustomEqId)}" ${selectedCustomEqId ? "" : "disabled"}>Preset loeschen</button>
+            </div>
+          </div>
+          <div class="eq-curve" aria-hidden="true">
+            ${eq.bands.map((value) => `<i style="height: ${44 + Number(value) * 3}px"></i>`).join("")}
+          </div>
+          <div class="band-grid">
+            ${eq.bands.map((value, index) => {
+              const numericValue = Number(value);
+              return `
+                <label class="band-control">
+                  <span class="band-value">${numericValue > 0 ? "+" : ""}${numericValue}</span>
+                  <input type="range" min="-10" max="10" value="${numericValue}" ${disabled}
+                    style="--fader-position: ${faderPosition(numericValue, -10, 10, true)}"
+                    aria-label="${EQ_BANDS[index]} ${numericValue}"
+                    data-control="group-band" data-band="${index}" data-group-id="${escapeAttr(group.id)}">
+                  <span class="band-label">${EQ_BANDS[index]}</span>
+                </label>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function groupStepButton(groupId, label, value, mode, disabled) {
+    const action = mode === "set" ? "group-volume-set" : "group-volume";
+    const data = mode === "set" ? `data-value="${value}"` : `data-delta="${value}"`;
+    return `<button class="step-button" type="button" ${disabled} data-action="${action}" ${data} data-group-id="${escapeAttr(groupId)}"><span>${escapeHtml(label)}</span></button>`;
+  }
+
+  function renderGroupRoleButtons(group, scope, disabled) {
+    if (scope === "group") {
+      const routes = [
+        { value: "left_right", label: "L / R" },
+        { value: "mono_both", label: "M / M" },
+        { value: "right_left", label: "R / L" }
+      ];
+      return routes.map(({ value, label }) => {
+        const active = isGroupRouteActive(group, value);
+        return `<button class="mode-button ${active ? "is-active" : ""}" type="button" ${disabled}
+          data-action="group-role" data-value="${value}" data-group-id="${escapeAttr(group.id)}"
+          aria-pressed="${String(active)}"><span>${label}</span></button>`;
+      }).join("");
     }
 
-    const onlineSpeakers = state.speakers.filter(isOnline);
-    const targetOptions = [
-      '<option value="all">Alle verbundenen Speaker</option>',
-      ...onlineSpeakers.map((speaker) => `<option value="${escapeAttr(speaker.id)}">${escapeHtml(speakerDisplayId(speaker))}</option>`)
-    ].join("");
-
-    grid.innerHTML = state.customEqs.map((customEq) => `
-      <article class="custom-eq-card" data-custom-eq-id="${escapeAttr(customEq.id)}">
-        <div class="custom-eq-card__head">
-          <h2>${escapeHtml(customEq.name)}</h2>
-          <span class="status-pill ok">Lokal</span>
-        </div>
-        <p class="muted">${new Date(customEq.updatedAt).toLocaleString("de-DE")} / ${escapeHtml(customEq.sourceDevice || customEq.deviceModel)}</p>
-        <div class="custom-eq-preview" aria-label="EQ values ${customEq.bands.join(", ")}">
-          ${customEq.bands.map((value, index) => `
-            <div class="custom-eq-preview__band">
-              <span class="band-value">${value > 0 ? "+" : ""}${value}</span>
-              <i style="height: ${24 + value * 2}px" aria-hidden="true"></i>
-              <span class="band-label">${EQ_BANDS[index]}</span>
-            </div>
-          `).join("")}
-        </div>
-        <label class="custom-eq-target">
-          <span class="section-label">Ziel</span>
-          <select data-custom-eq-target ${onlineSpeakers.length ? "" : "disabled"}>${targetOptions}</select>
-        </label>
-        <div class="custom-eq-actions">
-          <button class="primary-inline" type="button" data-action="apply-custom-eq"
-            data-custom-eq-id="${escapeAttr(customEq.id)}" ${onlineSpeakers.length ? "" : "disabled"}>Anwenden</button>
-          <button class="ghost-action" type="button" data-action="delete-custom-eq"
-            data-custom-eq-id="${escapeAttr(customEq.id)}">Loeschen</button>
-        </div>
-      </article>
+    const speaker = getSpeaker(scope);
+    return ROLE_VALUES.map((role) => `
+      <button class="mode-button ${speaker?.stereoRole === role ? "is-active" : ""}" type="button" ${disabled}
+        data-action="group-role" data-value="${role}" data-group-id="${escapeAttr(group.id)}"
+        aria-pressed="${String(speaker?.stereoRole === role)}"><span>${role}</span></button>
     `).join("");
   }
 
@@ -1010,6 +1313,7 @@
   function setView(view) {
     if (!VIEW_IDS.includes(view)) return;
     state.view = view;
+    persistUiState();
     render();
     history.replaceState(null, "", `${location.pathname}${location.search}#${view}`);
     window.requestAnimationFrame(() => {
@@ -1029,10 +1333,19 @@
   function updateSpeaker(speakerId, patch) {
     const speaker = getSpeaker(speakerId);
     if (!speaker) return;
+    let selectionChanged = false;
+    if (patch.eq) {
+      const selectedId = state.selectedCustomEq.get(speakerId);
+      const selectedEq = state.customEqs.find((item) => item.id === selectedId);
+      if (!selectedEq || patch.eq.preset !== "custom" || !sameEqBands(patch.eq.bands, selectedEq.bands)) {
+        selectionChanged = state.selectedCustomEq.delete(speakerId);
+      }
+    }
     Object.assign(speaker, patch, { lastSeenAt: Date.now() });
     if (typeof speaker.rawVolume === "number") {
       speaker.rawVolume = clamp(speaker.rawVolume, 0, 255);
     }
+    if (selectionChanged) persistUiState();
     render();
   }
 
@@ -1050,6 +1363,34 @@
       raw.setAttribute("aria-label", `Raw volume ${rawVolume} von 255`);
     }
     if (summary) summary.textContent = formatVolumeSummary(rawVolume);
+  }
+
+  function updateGroupVolumeDom(groupId, rawVolume) {
+    const level = document.querySelector(`[data-group-level-readout="${cssEscape(groupId)}"]`);
+    const raw = document.querySelector(`[data-group-raw-volume="${cssEscape(groupId)}"]`);
+    const summary = document.querySelector(`[data-group-volume-summary="${cssEscape(groupId)}"]`);
+    if (level) {
+      const levelNumber = levelNumberFromRaw(rawVolume);
+      level.textContent = String(levelNumber);
+      level.setAttribute("aria-label", `Level ${levelNumber}`);
+    }
+    if (raw) {
+      raw.textContent = `${rawVolume} / 255`;
+      raw.setAttribute("aria-label", `Raw volume ${rawVolume} von 255`);
+    }
+    if (summary) summary.textContent = formatVolumeSummary(rawVolume);
+  }
+
+  function updateBandControlDom(target, rawValue) {
+    const value = clamp(Number(rawValue), -10, 10);
+    const control = target.closest(".band-control");
+    const valueLabel = control?.querySelector(".band-value");
+    const curveBars = target.closest(".eq-panel")?.querySelectorAll(".eq-curve i");
+    target.style.setProperty("--fader-position", faderPosition(value, -10, 10, true));
+    if (valueLabel) valueLabel.textContent = `${value > 0 ? "+" : ""}${value}`;
+    if (curveBars?.[Number(target.dataset.band)]) {
+      curveBars[Number(target.dataset.band)].style.height = `${44 + value * 3}px`;
+    }
   }
 
   function scheduleWrite(key, fn, delay) {
@@ -1071,6 +1412,65 @@
       group.speakerIds = state.speakers.filter(isOnline).slice(0, 2).map((speaker) => speaker.id);
     }
     return group;
+  }
+
+  function getGroup(groupId) {
+    return state.groups.find((group) => group.id === groupId);
+  }
+
+  function getGroupSpeakers(group) {
+    return (group?.speakerIds || []).map(getSpeaker).filter(Boolean);
+  }
+
+  function getGroupScope(group) {
+    if (!group) return "group";
+    const scope = state.groupScopes.get(group.id) || "group";
+    if (scope === "group" || group.speakerIds.includes(scope)) return scope;
+    if (group.speakerIds.length < 2) return scope;
+    state.groupScopes.set(group.id, "group");
+    persistUiState();
+    return "group";
+  }
+
+  function getGroupActionTargets(groupId) {
+    const group = getGroup(groupId);
+    if (!group) return [];
+    const scope = getGroupScope(group);
+    if (scope === "group") return getGroupSpeakers(group).filter(isOnline);
+    const speaker = getSpeaker(scope);
+    return isOnline(speaker) ? [speaker] : [];
+  }
+
+  function groupRawVolume(group) {
+    const speakers = getGroupSpeakers(group);
+    if (!speakers.length) return 0;
+    const total = speakers.reduce((sum, speaker) => sum + Number(speaker.rawVolume || 0), 0);
+    return Math.round(total / speakers.length);
+  }
+
+  function getCommonSpeakerValue(speakers, selector) {
+    if (!speakers.length) return "";
+    const first = selector(speakers[0]);
+    return speakers.every((speaker) => selector(speaker) === first) ? first : "";
+  }
+
+  function isGroupRouteActive(group, route) {
+    const [first, second] = getGroupSpeakers(group);
+    if (!first || !second) return false;
+    if (route === "mono_both") return first.stereoRole === "M" && second.stereoRole === "M";
+    if (route === "left_right") return first.stereoRole === "L" && second.stereoRole === "R";
+    if (route === "right_left") return first.stereoRole === "R" && second.stereoRole === "L";
+    return false;
+  }
+
+  function isGroupTeamModeActive(group, scope, mode) {
+    if (scope !== "group") return getSpeaker(scope)?.teamUpMode === mode;
+    const speakers = getGroupSpeakers(group);
+    if (!speakers.length) return false;
+    if (mode === "host") {
+      return speakers[0].teamUpMode === "host" && speakers.slice(1).every((speaker) => speaker.teamUpMode === "join");
+    }
+    return speakers.every((speaker) => speaker.teamUpMode === mode);
   }
 
   function isGroupOnline(group) {
@@ -1198,6 +1598,34 @@
     return speaker.teamId || extractTeamId(speaker.name) || speaker.bluetoothDeviceId || speaker.id || "SOUNDBOKS 4";
   }
 
+  function customEqOptions(selectedId) {
+    const placeholder = state.customEqs.length ? "Preset" : "Keine Presets";
+    return [
+      `<option value="">${placeholder}</option>`,
+      ...state.customEqs.map((customEq) => `
+        <option value="${escapeAttr(customEq.id)}" ${customEq.id === selectedId ? "selected" : ""}>${escapeHtml(customEq.name)}</option>
+      `)
+    ].join("");
+  }
+
+  function getSelectedCustomEqId(speakers) {
+    if (!speakers.length) return "";
+    const selectedIds = speakers.map((speaker) => state.selectedCustomEq.get(speaker.id) || "");
+    const selectedId = selectedIds[0];
+    if (!selectedId || !selectedIds.every((id) => id === selectedId)) return "";
+    const customEq = state.customEqs.find((item) => item.id === selectedId);
+    if (!customEq) return "";
+    return speakers.every((speaker) => sameEqBands(speaker.eq?.bands, customEq.bands))
+      ? selectedId
+      : "";
+  }
+
+  function sameEqBands(left, right) {
+    return Array.isArray(left) && Array.isArray(right) &&
+      left.length === EQ_BANDS.length && right.length === EQ_BANDS.length &&
+      left.every((value, index) => Number(value) === Number(right[index]));
+  }
+
   function createId(prefix) {
     if (window.crypto && crypto.randomUUID) return `${prefix}-${crypto.randomUUID()}`;
     return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -1239,6 +1667,50 @@
   function structuredCloneSafe(value) {
     if (typeof structuredClone === "function") return structuredClone(value);
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function loadUiState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(UI_STATE_STORAGE) || "null");
+      if (!parsed || parsed.version !== 1) return;
+      if (VIEW_IDS.includes(parsed.view)) state.view = parsed.view;
+      if (LIMITS.some((limit) => limit.name === parsed.activeLimit)) state.activeLimit = parsed.activeLimit;
+      state.expandedCustomEq = new Set(normalizeStoredIds(parsed.expandedCustomEq));
+      state.expandedGroupCustomEq = new Set(normalizeStoredIds(parsed.expandedGroupCustomEq));
+      state.selectedCustomEq = new Map(normalizeStoredEntries(parsed.selectedCustomEq)
+        .filter(([, customEqId]) => state.customEqs.some((customEq) => customEq.id === customEqId)));
+      state.groupScopes = new Map(normalizeStoredEntries(parsed.groupScopes));
+    } catch (error) {
+      logEvent("warn", "storage", `UI state: ${error.message}`);
+    }
+  }
+
+  function persistUiState() {
+    try {
+      localStorage.setItem(UI_STATE_STORAGE, JSON.stringify({
+        version: 1,
+        view: state.view,
+        activeLimit: state.activeLimit,
+        expandedCustomEq: [...state.expandedCustomEq],
+        expandedGroupCustomEq: [...state.expandedGroupCustomEq],
+        selectedCustomEq: [...state.selectedCustomEq.entries()],
+        groupScopes: [...state.groupScopes.entries()]
+      }));
+    } catch (error) {
+      logEvent("warn", "storage", `UI state: ${error.message}`);
+    }
+  }
+
+  function normalizeStoredIds(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => typeof item === "string" && item.length <= 120).slice(0, 50);
+  }
+
+  function normalizeStoredEntries(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry) => Array.isArray(entry) && entry.length === 2 &&
+      typeof entry[0] === "string" && entry[0].length <= 120 &&
+      typeof entry[1] === "string" && entry[1].length <= 120).slice(0, 50);
   }
 
   function loadCustomEqs() {
