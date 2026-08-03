@@ -706,8 +706,8 @@ h2 {
   isolation: isolate;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: var(--control-size);
+  height: var(--control-size);
   aspect-ratio: 1;
   min-height: 0;
   padding: 0;
@@ -751,19 +751,25 @@ h2 {
   transform: rotate(45deg);
 }
 
-.speaker-accordion {
-  display: grid;
-  gap: 20px;
+.quick-actions-shell {
   margin: 0 20px;
-  padding: 20px 0 24px;
+  padding: 20px 0;
   border-top: 1px solid var(--line);
 }
 
-.speaker-card.is-expanded .speaker-accordion {
+.custom-eq-accordion {
+  display: grid;
+  gap: 20px;
+  margin: 0 20px;
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+}
+
+.speaker-card.is-custom-eq-expanded .custom-eq-accordion {
   animation: view-in 240ms var(--ease) both;
 }
 
-.speaker-accordion[hidden] {
+.custom-eq-accordion[hidden] {
   display: none;
 }
 
@@ -771,13 +777,13 @@ h2 {
   --control-size: 72px;
   --control-gap: 8px;
   display: grid;
-  grid-template-columns: var(--control-size) 1px max-content 1px var(--control-size);
+  grid-template-columns:
+    var(--control-size) 1px var(--control-size) 1px max-content
+    1px var(--control-size) 1px var(--control-size);
   align-items: center;
   justify-content: center;
   gap: var(--control-gap);
   min-width: 0;
-  padding: 2px 0 20px;
-  border-bottom: 1px solid var(--line);
 }
 
 .mode-stack {
@@ -816,12 +822,6 @@ h2 {
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   line-height: 1;
-}
-
-.level-control-spacer {
-  width: var(--control-size);
-  height: var(--control-size);
-  aspect-ratio: 1;
 }
 
 .range {
@@ -934,7 +934,9 @@ h2 {
   background: var(--control-border);
   clip-path: var(--octagon);
   color: var(--control-ink);
-  font-size: 0.62rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.12;
 }
 
 .mode-button {
@@ -954,11 +956,9 @@ h2 {
   background: var(--control-border);
   clip-path: var(--octagon);
   color: var(--control-ink);
-  font-size: 0.68rem;
-}
-
-.mode-button--team {
-  font-size: 0.52rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.12;
 }
 
 .step-button::before,
@@ -976,6 +976,34 @@ h2 {
 .mode-button span {
   position: relative;
   z-index: 1;
+  max-width: 78%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.protocol-unavailable:disabled {
+  opacity: 0.62;
+}
+
+.power-icon {
+  position: relative;
+  display: block;
+  width: 17px;
+  height: 17px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+}
+
+.power-icon::before {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 2px;
+  height: 10px;
+  background: currentColor;
+  transform: translateX(-50%);
+  content: "";
 }
 
 .step-button:hover,
@@ -1154,10 +1182,11 @@ h2 {
 .band-value {
   display: inline-grid;
   place-items: center;
-  width: 38px;
+  width: 32px;
   height: 32px;
+  aspect-ratio: 1;
   background: var(--surface-strong);
-  clip-path: var(--hexagon);
+  clip-path: var(--octagon);
   color: var(--ink);
   font-size: 0.62rem;
   font-variant-numeric: tabular-nums;
@@ -1185,7 +1214,13 @@ h2 {
 }
 
 .speaker-actions {
-  padding-top: 1px;
+  margin: 0 20px;
+  padding: 20px 0 24px;
+  border-top: 1px solid var(--line);
+}
+
+.speaker-error {
+  margin: 0 20px 24px;
 }
 
 .groups-grid,
@@ -1304,12 +1339,6 @@ h2 {
 @keyframes view-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-@media (min-width: 1320px) {
-  .speaker-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 1120px) {
@@ -1557,8 +1586,69 @@ h2 {
     padding: 17px 14px 15px;
   }
 
-  .speaker-accordion {
+  .quick-actions-shell,
+  .custom-eq-accordion,
+  .speaker-actions {
     margin-inline: 14px;
+  }
+
+  .mode-control-layout {
+    grid-template-columns: var(--control-size) 1px max-content 1px var(--control-size);
+    grid-template-areas:
+      "eq eq eq eq eq"
+      "outer-left outer-left outer-left outer-left outer-left"
+      "role inner-left level inner-right team"
+      "outer-right outer-right outer-right outer-right outer-right"
+      "system system system system system";
+  }
+
+  .quick-stack {
+    grid-template-columns: repeat(3, var(--control-size));
+    grid-template-rows: var(--control-size);
+    justify-content: center;
+  }
+
+  .quick-stack--eq {
+    grid-area: eq;
+  }
+
+  .control-divider--outer-left {
+    grid-area: outer-left;
+  }
+
+  .mode-stack--role {
+    grid-area: role;
+  }
+
+  .control-divider--inner-left {
+    grid-area: inner-left;
+  }
+
+  .level-control-grid {
+    grid-area: level;
+  }
+
+  .control-divider--inner-right {
+    grid-area: inner-right;
+  }
+
+  .mode-stack--team {
+    grid-area: team;
+  }
+
+  .control-divider--outer-right {
+    grid-area: outer-right;
+  }
+
+  .quick-stack--system {
+    grid-area: system;
+  }
+
+  .control-divider--outer-left,
+  .control-divider--outer-right {
+    align-self: center;
+    width: 100%;
+    height: 1px;
   }
 
   .eq-panel {
@@ -1595,7 +1685,7 @@ h2 {
   }
 
   .band-value {
-    width: 33px;
+    width: 28px;
     height: 28px;
     font-size: 0.56rem;
   }
@@ -1607,6 +1697,10 @@ h2 {
   .speaker-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .speaker-error {
+    margin-inline: 14px;
   }
 
   .group-card,
@@ -1633,8 +1727,9 @@ h2 {
     --control-gap: 6px;
   }
 
-  .mode-button--team {
-    font-size: 0.48rem;
+  .step-button,
+  .mode-button {
+    font-size: 0.58rem;
   }
 }
 
@@ -1659,12 +1754,9 @@ h2 {
     font-size: 0.58rem;
   }
 
-  .step-button {
-    font-size: 0.55rem;
-  }
-
-  .mode-button--team {
-    font-size: 0.43rem;
+  .step-button,
+  .mode-button {
+    font-size: 0.54rem;
   }
 
   .level-badge {

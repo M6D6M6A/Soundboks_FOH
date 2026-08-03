@@ -54,7 +54,8 @@ Die aktuelle Version bietet:
 - Tablet: kompakte dreispaltige Session-Uebersicht
 - Mobile: Bottom-Navigation, einspaltige Controls und Safe-Area-Unterstuetzung
 - Monochromes, rasterbasiertes UI mit der Markenfarbe `#d95007`
-- Fader-first-Geraetekarten mit getrennten Chamfer-Panels und standardmaessig geschlossenem Control-Accordion
+- Fader-first-Geraetekarten mit dauerhaft sichtbarer Quick-Action-Matrix und separat klappbarem Custom-EQ-Editor
+- responsive Fuenf-Gruppen-Steuerung fuer EQ, Stereo-Rolle, Level, TeamUp und Systemaktionen
 - konturierte Oktagon-Fader mit transparenter Schienenluecke, zentrierter Raw-Anzeige und einheitlich quadratischen 33-Prozent-Control-Oktagonen
 - grosse Touch-Ziele, sichtbare Fokuszustaende und Reduced-Motion-Support
 

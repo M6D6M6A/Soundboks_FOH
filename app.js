@@ -21,6 +21,7 @@
   ];
 
   const EQ_PRESETS = ["dancefloor", "stage", "lounge", "custom"];
+  const QUICK_EQ_PRESETS = ["stage", "dancefloor", "lounge"];
   const EQ_LABELS = {
     dancefloor: "Dancefloor",
     stage: "Stage",
@@ -52,7 +53,7 @@
     diagnostics: [],
     clients: new Map(),
     writeTimers: new Map(),
-    expandedSpeakers: new Set()
+    expandedCustomEq: new Set()
   };
 
   const $ = (selector) => document.querySelector(selector);
@@ -216,7 +217,7 @@
       "serviceWorker" in navigator &&
       (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ) {
-      navigator.serviceWorker.register("sw.js?v=20260803-square-controls-2").catch((error) => {
+      navigator.serviceWorker.register("sw.js?v=20260803-quick-actions-3").catch((error) => {
         logEvent("warn", "app", `service worker: ${error.message}`);
       });
     }
@@ -397,7 +398,7 @@
     if (action === "group-volume") return adjustGroupVolume(dataset.groupId, Number(dataset.delta));
 
     if (!speakerId) return;
-    if (action === "toggle-speaker-settings") return toggleSpeakerSettings(speakerId);
+    if (action === "toggle-custom-eq") return toggleCustomEq(speakerId);
     if (action === "disconnect") return disconnectSpeaker(speakerId);
     if (action === "read-state") return readSpeakerState(speakerId);
     if (action === "volume-step") return adjustVolume(speakerId, Number(dataset.delta));
@@ -407,28 +408,28 @@
     if (action === "eq-preset") return setEqPreset(speakerId, dataset.preset);
   }
 
-  function toggleSpeakerSettings(speakerId) {
-    const expanded = !state.expandedSpeakers.has(speakerId);
+  function toggleCustomEq(speakerId) {
+    const expanded = !state.expandedCustomEq.has(speakerId);
     if (expanded) {
-      state.expandedSpeakers.add(speakerId);
+      state.expandedCustomEq.add(speakerId);
     } else {
-      state.expandedSpeakers.delete(speakerId);
+      state.expandedCustomEq.delete(speakerId);
     }
 
     const card = document.querySelector(`[data-card-speaker="${cssEscape(speakerId)}"]`);
-    const toggle = card?.querySelector('[data-action="toggle-speaker-settings"]');
-    const accordion = card?.querySelector(".speaker-accordion");
+    const toggle = card?.querySelector('[data-action="toggle-custom-eq"]');
+    const accordion = card?.querySelector(".custom-eq-accordion");
     if (!toggle || !accordion) {
       renderSpeakers();
       return;
     }
 
-    card.classList.toggle("is-expanded", expanded);
+    card.classList.toggle("is-custom-eq-expanded", expanded);
     accordion.hidden = !expanded;
     accordion.setAttribute("aria-hidden", String(!expanded));
     toggle.setAttribute("aria-expanded", String(expanded));
-    toggle.setAttribute("aria-label", expanded ? "Controls ausblenden" : "Controls einblenden");
-    toggle.title = expanded ? "Controls ausblenden" : "Controls einblenden";
+    toggle.setAttribute("aria-label", expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden");
+    toggle.title = expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden";
   }
 
   function loadDemoSetup() {
@@ -458,7 +459,7 @@
     };
     state.speakers = state.speakers.filter((speaker) => !speaker.demo);
     state.speakers.unshift(demoOne, demoTwo);
-    state.expandedSpeakers.clear();
+    state.expandedCustomEq.clear();
     state.groups = [
       {
         id: "front-pair",
@@ -758,14 +759,14 @@
     const volumeSummary = formatVolumeSummary(raw);
     const level = levelNumberFromRaw(raw);
     const volumeFaderPosition = faderPosition(raw, 0, 255);
-    const expanded = state.expandedSpeakers.has(speaker.id);
-    const accordionId = `speaker-controls-${cardIndex}`;
+    const expanded = state.expandedCustomEq.has(speaker.id);
+    const accordionId = `custom-eq-${cardIndex}`;
     const stereoRole = ROLE_VALUES.includes(speaker.stereoRole) ? speaker.stereoRole : "M";
     const teamUpMode = TEAMUP_VALUES.includes(speaker.teamUpMode) ? speaker.teamUpMode : "solo";
     const speakerTitle = `${speakerDisplayId(speaker)} | ${stereoRole} | ${TEAMUP_LABELS[teamUpMode]} | ${EQ_LABELS[eq.preset] || EQ_LABELS.custom}`;
 
     return `
-      <article class="speaker-card ${expanded ? "is-expanded" : ""}" data-card-speaker="${escapeAttr(speaker.id)}">
+      <article class="speaker-card ${expanded ? "is-custom-eq-expanded" : ""}" data-card-speaker="${escapeAttr(speaker.id)}">
         <div class="card-heading speaker-panel speaker-card__title">
           <div class="speaker-title">
             <h2>${escapeHtml(speakerTitle)}</h2>
@@ -777,13 +778,6 @@
           <div class="meter-wrap">
             <div class="fader-head">
               <span class="section-label">Level</span>
-              <button class="settings-toggle" type="button"
-                data-action="toggle-speaker-settings" data-speaker-id="${escapeAttr(speaker.id)}"
-                aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
-                aria-label="${expanded ? "Controls ausblenden" : "Controls einblenden"}"
-                title="${expanded ? "Controls ausblenden" : "Controls einblenden"}">
-                <span class="accordion-glyph" aria-hidden="true"></span>
-              </button>
             </div>
             <input class="range" type="range" min="0" max="255" value="${raw}" ${disabled}
               style="--fader-position: ${volumeFaderPosition}"
@@ -796,9 +790,19 @@
             </p>
           </div>
 
-          <div id="${accordionId}" class="speaker-accordion" ${expanded ? "" : "hidden"} aria-hidden="${String(!expanded)}">
+          <div class="quick-actions-shell">
             <div class="mode-control-layout">
-              <div class="mode-stack" role="group" aria-label="Stereo Role">
+              <div class="mode-stack quick-stack quick-stack--eq" role="group" aria-label="Quick EQ Presets">
+                ${QUICK_EQ_PRESETS.map((preset) => `
+                  <button class="mode-button quick-action-button ${eq.preset === preset ? "is-active" : ""}" type="button" ${disabled}
+                    data-action="eq-preset" data-preset="${preset}" data-speaker-id="${escapeAttr(speaker.id)}"
+                    aria-pressed="${String(eq.preset === preset)}"><span>${preset === "dancefloor" ? "Dance<wbr>floor" : EQ_LABELS[preset]}</span></button>
+                `).join("")}
+              </div>
+
+              <div class="control-divider control-divider--outer-left" aria-hidden="true"></div>
+
+              <div class="mode-stack mode-stack--role" role="group" aria-label="Stereo Role">
                 ${ROLE_VALUES.map((role) => `
                   <button class="mode-button ${stereoRole === role ? "is-active" : ""}" type="button" ${disabled}
                     data-action="role" data-role="${role}" data-speaker-id="${escapeAttr(speaker.id)}"
@@ -806,41 +810,57 @@
                 `).join("")}
               </div>
 
-              <div class="control-divider" aria-hidden="true"></div>
+              <div class="control-divider control-divider--inner-left" aria-hidden="true"></div>
 
               <div class="level-control-grid" role="group" aria-label="Volume controls">
                 ${stepButton(speaker.id, "min", 0, "set", disabled)}
-                <span class="level-control-spacer" aria-hidden="true"></span>
+                ${stepButton(speaker.id, "mid", 128, "set", disabled)}
                 ${stepButton(speaker.id, "max", 255, "set", disabled)}
                 ${stepButton(speaker.id, "-1", -1, "step", disabled)}
                 <output class="level-badge" data-level-readout="${escapeAttr(speaker.id)}" aria-label="Level ${level}">${level}</output>
                 ${stepButton(speaker.id, "+1", 1, "step", disabled)}
                 ${stepButton(speaker.id, "-10", -10, "step", disabled)}
-                ${stepButton(speaker.id, "mid", 128, "set", disabled)}
+                <button class="settings-toggle" type="button"
+                  data-action="toggle-custom-eq" data-speaker-id="${escapeAttr(speaker.id)}"
+                  aria-controls="${accordionId}" aria-expanded="${String(expanded)}"
+                  aria-label="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}"
+                  title="${expanded ? "Custom EQ ausblenden" : "Custom EQ einblenden"}">
+                  <span class="accordion-glyph" aria-hidden="true"></span>
+                </button>
                 ${stepButton(speaker.id, "+10", 10, "step", disabled)}
               </div>
 
-              <div class="control-divider" aria-hidden="true"></div>
+              <div class="control-divider control-divider--inner-right" aria-hidden="true"></div>
 
-              <div class="mode-stack" role="group" aria-label="TeamUp Mode">
+              <div class="mode-stack mode-stack--team" role="group" aria-label="TeamUp Mode">
                 ${TEAMUP_VALUES.map((mode) => `
-                  <button class="mode-button mode-button--team ${teamUpMode === mode ? "is-active" : ""}" type="button" ${disabled}
+                  <button class="mode-button ${teamUpMode === mode ? "is-active" : ""}" type="button" ${disabled}
                     data-action="teamup" data-mode="${mode}" data-speaker-id="${escapeAttr(speaker.id)}"
                     aria-pressed="${String(teamUpMode === mode)}"><span>${TEAMUP_LABELS[mode]}</span></button>
                 `).join("")}
               </div>
-            </div>
 
+              <div class="control-divider control-divider--outer-right" aria-hidden="true"></div>
+
+              <div class="mode-stack quick-stack quick-stack--system" role="group" aria-label="System and Custom actions">
+                <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
+                  aria-label="Power off" title="Power-off BLE command not mapped">
+                  <span class="power-icon" aria-hidden="true"></span>
+                </button>
+                <button class="mode-button quick-action-button protocol-unavailable" type="button" disabled
+                  aria-label="SKAA Pro" title="SKAA Pro BLE command not mapped"><span>SKAA<br>Pro</span></button>
+                <button class="mode-button quick-action-button ${eq.preset === "custom" ? "is-active" : ""}" type="button" ${disabled}
+                  data-action="eq-preset" data-preset="custom" data-speaker-id="${escapeAttr(speaker.id)}"
+                  aria-pressed="${String(eq.preset === "custom")}"><span>Custom<br>EQ</span></button>
+              </div>
+            </div>
+          </div>
+
+          <div id="${accordionId}" class="custom-eq-accordion" ${expanded ? "" : "hidden"} aria-hidden="${String(!expanded)}">
             <div class="control-section eq-panel">
               <div class="eq-header">
-                <span class="section-label">EQ</span>
+                <span class="section-label">Custom EQ</span>
                 <span class="eq-active">${EQ_LABELS[eq.preset]}</span>
-              </div>
-              <div class="segmented eq" aria-label="EQ Presets">
-                ${EQ_PRESETS.map((preset) => `
-                  <button class="preset-button ${eq.preset === preset ? "is-active" : ""}" type="button" ${disabled}
-                    data-action="eq-preset" data-preset="${preset}" data-speaker-id="${escapeAttr(speaker.id)}">${EQ_LABELS[preset]}</button>
-                `).join("")}
               </div>
               <div class="eq-curve" aria-hidden="true">
                 ${eq.bands.map((value) => `<i style="height: ${44 + Number(value) * 3}px"></i>`).join("")}
@@ -861,13 +881,13 @@
                 }).join("")}
               </div>
             </div>
-
-            <div class="header-actions speaker-actions">
-              <button class="ghost-action" type="button" data-action="read-state" data-speaker-id="${escapeAttr(speaker.id)}" ${disabled}>Status lesen</button>
-              <button class="ghost-action" type="button" data-action="disconnect" data-speaker-id="${escapeAttr(speaker.id)}">Trennen</button>
-            </div>
-            ${speaker.error ? `<div class="callout">${escapeHtml(speaker.error)}</div>` : ""}
           </div>
+
+          <div class="header-actions speaker-actions">
+            <button class="ghost-action" type="button" data-action="read-state" data-speaker-id="${escapeAttr(speaker.id)}" ${disabled}>Status lesen</button>
+            <button class="ghost-action" type="button" data-action="disconnect" data-speaker-id="${escapeAttr(speaker.id)}">Trennen</button>
+          </div>
+          ${speaker.error ? `<div class="callout speaker-error">${escapeHtml(speaker.error)}</div>` : ""}
         </section>
       </article>
     `;
